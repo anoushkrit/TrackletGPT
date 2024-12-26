@@ -592,32 +592,26 @@ class GPT_Transformer(nn.Module):
         relative_position = center[:, 1:, :] - center[:, :-1, :]
         relative_norm = torch.norm(relative_position, dim=-1, keepdim=True)
         relative_direction = relative_position / relative_norm
+        # position = torch.cat(
+        #     [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
         position = torch.cat(
-            [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
+            [self.sos_pos.expand(batch_size, -1, -1),
+             center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
         pos_relative = self.pos_embed(position)
 
         sos_pos = self.sos_pos.expand(batch_size, -1, -1)
-        pos_absolute = self.pos_embed(center[:, :-1, :])
+        # pos_absolute = self.pos_embed(center[:, :-1, :])
+        pos_absolute = self.pos_embed(center)
         pos_absolute = torch.cat([sos_pos, pos_absolute], dim=1)
 
         attn_mask = torch.full(
-            (seq_len, seq_len), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
+            (seq_len+1, seq_len+1), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
         ).to(torch.bool)
 
         with torch.no_grad():
             attn_mask = torch.triu(attn_mask, diagonal=1)
 
-            # point wise
-            # overall_mask = np.zeros([self.num_groups, self.num_groups])
-            # for i in range(self.num_groups):
-            #     mask = np.hstack([
-            #         np.zeros(self.num_groups-self.num_mask),
-            #         np.ones(self.num_mask),
-            #     ])
-            #     np.random.shuffle(mask)
-            #     overall_mask[i, :] = mask
-            # overall_mask = torch.from_numpy(
-            #     overall_mask).to(torch.bool).to('cuda')
+
 
             # column wise
             overall_mask = np.hstack([
@@ -626,13 +620,13 @@ class GPT_Transformer(nn.Module):
             ])
             np.random.shuffle(overall_mask)
             overall_mask = np.hstack([
-                np.zeros(self.keep_attend),
+                np.zeros(1+self.keep_attend), # +1 for sos token
                 overall_mask,
             ])
             overall_mask = torch.from_numpy(
                 overall_mask).to(torch.bool).to('cuda')
 
-            eye_mask = torch.eye(self.num_groups).to(torch.bool).to('cuda')
+            eye_mask = torch.eye(self.num_groups+1).to(torch.bool).to('cuda')
 
             attn_mask = attn_mask | overall_mask.unsqueeze(0) & ~eye_mask
 

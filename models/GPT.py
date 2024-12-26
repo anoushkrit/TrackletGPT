@@ -79,10 +79,11 @@ class GPT_extractor(nn.Module):
 
         # prepend sos token
         sos = torch.ones(1, batch, self.embed_dim, device=h.device) * self.sos
-        if not classify:
-            h = torch.cat([sos, h[:-1, :, :]], axis=0)
-        else:
-            h = torch.cat([sos, h], axis=0)
+
+        # if not classify:
+        #     h = torch.cat([sos, h[:-1, :, :]], axis=0)
+        # else:
+        h = torch.cat([sos, h], axis=0) # always using all patches, including sos
 
         # transformer
         for layer in self.layers:
@@ -112,8 +113,8 @@ class GPT_generator(nn.Module):
         self.group_size = group_size
 
         # start of sequence token
-        self.sos = torch.nn.Parameter(torch.zeros(embed_dim))
-        nn.init.normal_(self.sos)
+        # self.sos = torch.nn.Parameter(torch.zeros(embed_dim))
+        # nn.init.normal_(self.sos)
 
         self.layers = nn.ModuleList()
         for _ in range(num_layers):
