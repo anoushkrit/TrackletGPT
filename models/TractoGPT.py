@@ -18,98 +18,6 @@ from models.z_order import *
 import similaritymeasures
 import pickle
 
-
-# class FrechetLoss(torch.nn.Module):
-#     def __init__(self):
-#         super(FrechetLoss, self).__init__()
-
-#     def forward(self, generated, ground_truth):
-
-        
-#         # Compute mean and covariance for generated point clouds
-#         mu_g = torch.mean(generated, dim=1, keepdim=True)  # Shape: (batch_size, 1, 3)
-#         centered_g = generated - mu_g  # Centered points
-#         cov_g = torch.bmm(centered_g.transpose(1, 2), centered_g) / (generated.size(1) - 1)  # Shape: (batch_size, 3, 3)
-
-#         # Compute mean and covariance for ground truth point clouds
-#         mu_gt = torch.mean(ground_truth, dim=1, keepdim=True)  # Shape: (batch_size, 1, 3)
-#         centered_gt = ground_truth - mu_gt  # Centered points
-#         cov_gt = torch.bmm(centered_gt.transpose(1, 2), centered_gt) / (ground_truth.size(1) - 1)  # Shape: (batch_size, 3, 3)
-
-#         mu_diff = mu_g - mu_gt  # Shape: (batch_size, 1, 3)
-#         mu_diff_sq = torch.norm(mu_diff, dim=2).squeeze() ** 2  # Shape: (batch_size,)
-
-#         # Covariance distance
-#         cov_g_inv = torch.linalg.inv(cov_g)  # Shape: (batch_size, 3, 3)
-#         cov_product = torch.bmm(cov_g_inv, cov_gt)  # Shape: (batch_size, 3, 3)
-        
-#         cov_product_sqrt = torch.linalg.cholesky(cov_product + 1e-3 * torch.eye(3, device=cov_product.device).unsqueeze(0))  # Shape: (batch_size, 3, 3)
-
-#         trace_term = torch.trace(cov_g + cov_gt - 2 * cov_product_sqrt)  # Shape: (batch_size,)
-
-#         frechet_distance = mu_diff_sq + trace_term
-#         return torch.mean(frechet_distance)
-
-# class FrechetLoss(torch.nn.Module):
-#     def __init__(self):
-#         super(FrechetLoss, self).__init__()
-    
-#     def minkowski_distance(self, exp_data, num_data, p):
-#         # exp_data: (m, d)
-#         # num_data: (n, d)
-
-#         # Compute pairwise Minkowski distance
-#         # exp_data[:, None, :] creates (m, 1, d), num_data[None, :, :] creates (1, n, d)
-#         diff = torch.abs(exp_data[:, None, :] - num_data[None, :, :])  # Shape: (m, n, d)
-#         dist = torch.sum(diff**p, dim=2) ** (1/p)  # Minkowski distance, Shape: (m, n)
-
-#         return dist
-#     def forward(self, generated, ground_truth):
-#         """
-#         code copied from similaritymeasures library
-#         frechet_dist
-
-#         n = len(exp_data)
-#         m = len(num_data)
-#         c = distance.cdist(exp_data, num_data, metric='minkowski', p=p)
-#         ca = np.ones((n, m))
-#         ca = np.multiply(ca, -1)
-#         ca[0, 0] = c[0, 0]
-#         for i in range(1, n):
-#             ca[i, 0] = max(ca[i-1, 0], c[i, 0])
-#         for j in range(1, m):
-#             ca[0, j] = max(ca[0, j-1], c[0, j])
-#         for i in range(1, n):
-#             for j in range(1, m):
-#                 ca[i, j] = max(min(ca[i-1, j], ca[i, j-1], ca[i-1, j-1]),
-#                             c[i, j])
-#         return ca[n-1, m-1]
-#         """
-#         B = generated.size(0)
-#         frechet_distance = torch.zeros(B, device=generated.device)
-#         for b in range(B):
-
-#             exp_data = generated[b]
-#             num_data = ground_truth[b]
-#             print(exp_data.shape, num_data.shape)
-#             n = len(exp_data)
-#             m = len(num_data)
-#             c = self.minkowski_distance(exp_data, num_data, 2)
-#             ca = torch.ones((n, m), device=generated.device)
-#             ca = torch.mul(ca, -1)
-#             ca[0, 0] = c[0, 0]
-#             for i in range(1, n):
-#                 ca[i, 0] = max(ca[i-1, 0], c[i, 0])
-#             for j in range(1, m):
-#                 ca[0, j] = max(ca[0, j-1], c[0, j])
-#             for i in range(1, n):
-#                 for j in range(1, m):
-#                     ca[i, j] = max(min(ca[i-1, j], ca[i, j-1], ca[i-1, j-1]),
-#                                 c[i, j])
-#             frechet_distance[b] = ca[n-1, m-1]
-        
-#         return torch.mean(frechet_distance)
-
 class STN3d(nn.Module):
     def __init__(self, channel):
         super(STN3d, self).__init__()
@@ -313,48 +221,6 @@ class Group(nn.Module):
         sorted_indices = all_indices + idx_base
         sorted_indices = sorted_indices.view(-1)
 
-    def plot_3d_point_cloud(self, point_cloud):
-        """
-        Plots a 3D scatter plot of the given point cloud with index labels.
-
-        Parameters:
-        point_cloud (numpy.ndarray): A numpy array of shape (N, 3) where N is the number of points.
-        """
-        # Check if the input is a 2D array with 3 columns
-        if point_cloud.ndim != 2 or point_cloud.shape[1] != 3:
-            raise ValueError("Input must be a 2D array with shape (N, 3)")
-
-        # Extract x, y, z coordinates
-        x = point_cloud[:, 0]
-        y = point_cloud[:, 1]
-        z = point_cloud[:, 2]
-
-        # Create a 3D scatter plot
-        fig = go.Figure(data=[go.Scatter3d(
-            x=x,
-            y=y,
-            z=z,
-            mode='markers+lines+text',  # Add text labels to the points
-            marker=dict(size=5, color='blue'),
-            line=dict(width=2, color='lightblue'),
-            text=[str(i) for i in range(len(point_cloud))],  # Labels as point indices
-            textposition="top center"  # Position of the labels
-        )])
-
-        # Set the layout
-        fig.update_layout(
-            title='3D Scatter Plot of Points with Index Labels',
-            scene=dict(
-                xaxis_title='X',
-                yaxis_title='Y',
-                zaxis_title='Z'
-            )
-        )
-
-        # Show the plot
-        i = np.random.choice(100,1)[0]
-        fig.write_html(f'center_plots/{i}.html')
-
     def forward(self, xyz):
         '''
             input: B N 3
@@ -394,77 +260,6 @@ class Group(nn.Module):
         # for i in range(10):
         #     self.plot_3d_point_cloud(center[i].cpu().numpy())
         return neighborhood, center
-
-
-# # Transformers
-# class Mlp(nn.Module):
-#     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
-#         super().__init__()
-#         out_features = out_features or in_features
-#         hidden_features = hidden_features or in_features
-#         self.fc1 = nn.Linear(in_features, hidden_features)
-#         self.act = act_layer()
-#         self.fc2 = nn.Linear(hidden_features, out_features)
-#         self.drop = nn.Dropout(drop)
-
-#     def forward(self, x):
-#         x = self.fc1(x)
-#         x = self.act(x)
-#         x = self.drop(x)
-#         x = self.fc2(x)
-#         x = self.drop(x)
-#         return x
-
-
-# class Attention(nn.Module):
-#     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
-#         super().__init__()
-#         self.num_heads = num_heads
-#         head_dim = dim // num_heads
-#         self.scale = qk_scale or head_dim ** -0.5
-#         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-#         self.attn_drop = nn.Dropout(attn_drop)
-#         self.proj = nn.Linear(dim, dim)
-#         self.proj_drop = nn.Dropout(proj_drop)
-
-#     def forward(self, x):
-#         B, N, C = x.shape
-#         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C //
-#                                   self.num_heads).permute(2, 0, 3, 1, 4)
-#         # make torchscript happy (cannot use tensor as tuple)
-#         q, k, v = qkv[0], qkv[1], qkv[2]
-
-#         attn = (q @ k.transpose(-2, -1)) * self.scale
-#         attn = attn.softmax(dim=-1)
-#         attn = self.attn_drop(attn)
-
-#         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
-#         x = self.proj(x)
-#         x = self.proj_drop(x)
-#         return x
-
-
-# class Block(nn.Module):
-#     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-#                  drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
-#         super().__init__()
-#         self.norm1 = norm_layer(dim)
-
-#         self.drop_path = DropPath(
-#             drop_path) if drop_path > 0. else nn.Identity()
-#         self.norm2 = norm_layer(dim)
-#         mlp_hidden_dim = int(dim * mlp_ratio)
-#         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim,
-#                        act_layer=act_layer, drop=drop)
-
-#         self.attn = Attention(
-#             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
-
-#     def forward(self, x):
-#         x = x + self.drop_path(self.attn(self.norm1(x)))
-#         x = x + self.drop_path(self.mlp(self.norm2(x)))
-#         return x
-
 
 class PositionEmbeddingCoordsSine(nn.Module):
     """Similar to transformer's position encoding, but generalizes it to
@@ -528,6 +323,7 @@ class GPT_Transformer(nn.Module):
         self.drop_path_rate = config.transformer_config.drop_path_rate
         self.num_heads = config.transformer_config.num_heads
         self.group_size = config.group_size
+        self.num_groups = config.num_group
         print_log(f'[args] {config.transformer_config}', logger='Transformer')
 
         self.encoder_dims = config.transformer_config.encoder_dims
@@ -555,12 +351,12 @@ class GPT_Transformer(nn.Module):
             num_heads=self.num_heads,
             num_layers=self.decoder_depth,
             trans_dim=self.trans_dim,
-            group_size=self.group_size
+            group_size=self.group_size,
+            num_groups=self.num_groups,
         )
 
         # do not perform additional mask on the first (self.keep_attend) tokens
         self.keep_attend = 10
-        self.num_groups = config.num_group
         self.num_mask = int(
             (self.num_groups - self.keep_attend) * self.mask_ratio)
 
@@ -604,6 +400,9 @@ class GPT_Transformer(nn.Module):
         pos_absolute = self.pos_embed(center)
         pos_absolute = torch.cat([sos_pos, pos_absolute], dim=1)
 
+        # attn_mask = torch.full(
+        #     (seq_len, seq_len), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
+        # ).to(torch.bool)
         attn_mask = torch.full(
             (seq_len+1, seq_len+1), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
         ).to(torch.bool)
@@ -751,7 +550,8 @@ class PointTransformer(nn.Module):
             num_heads=self.num_heads,
             num_layers=self.decoder_depth,
             trans_dim=self.trans_dim,
-            group_size=self.group_size
+            group_size=self.group_size,
+            num_groups=self.num_group,
         )
 
         self.norm = nn.LayerNorm(self.trans_dim)
@@ -797,8 +597,6 @@ class PointTransformer(nn.Module):
         self.loss_ce = nn.CrossEntropyLoss()
         self.loss_ce_LRC = nn.CrossEntropyLoss()
         self.loss_triplet = nn.TripletMarginLoss(margin=23.0, p=2)
-        if self.config.frechet_loss:
-            self.loss_frechet = FrechetLoss()
 
     def get_triplet(self, labels, feat):
         anchors = []
@@ -912,95 +710,20 @@ class PointTransformer(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
     
-
-    def plot_3d_scatter(self,pts):
-        """
-        Takes a tensor of shape (1, 24, 3) on CUDA, moves it to CPU, and creates a 3D scatter plot.
-        
-        Parameters:
-            pts (torch.Tensor): Input tensor of shape (1, 24, 3) on CUDA.
-            
-        Returns:
-            None
-        """
-        # Move tensor to CPU and convert to NumPy
-        points_np = pts.cpu().numpy().squeeze()  # Shape becomes (24, 3)
-        
-        # Extract x, y, z coordinates
-        x, y, z = points_np[:, 0], points_np[:, 1], points_np[:, 2]
-        
-        # Create 3D scatter plot using Plotly
-        scatter = go.Scatter3d(
-            x=x, y=y, z=z,
-            mode='markers',
-            marker=dict(
-                size=5,
-                color=z,  # Color points based on z-axis values
-                colorscale='Viridis',
-                opacity=0.8
-            )
-        )
-
-        layout = go.Layout(
-            scene=dict(
-                xaxis_title='X',
-                yaxis_title='Y',
-                zaxis_title='Z'
-            ),
-            title='3D Scatter Plot'
-        )
-
-        fig = go.Figure(data=[scatter], layout=layout)
-        i = np.random.choice(100,1)[0]
-        os.makedirs('3d_scatterplots', exist_ok=True)
-        fig.write_html(f'3d_scatterplots/{i}.html')
-    
-    def get_similarity_measure(self, generated, ground_truth):
-        B = generated.shape[0]
-        frechet_distances = torch.zeros(B)
-        
-        # Loop through each batch and compute the Fréchet distance
-        for i in range(B):
-            gen_points = generated[i].cpu().detach().numpy()  # Convert to numpy for similaritymeasures
-            gt_points = ground_truth[i].cpu().detach().numpy()  # Convert to numpy for similaritymeasures
-            
-            frechet_dist = similaritymeasures.frechet_distance(gen_points, gt_points)
-            frechet_distances[i] = frechet_dist
-        
-        return frechet_distances
-    
     def forward(self, pts):
         if self.cls_method == 'm1' or self.cls_method == 'm2' or self.cls_method == 'm3' or self.cls_method == 'm4':
             mainS, pts = pts
-        
-        # i = np.random.choice(10,1)[0]
-        # os.makedirs(f'patches/cluster/{i}', exist_ok=True)
-        # with open(f'patches/cluster/{i}/before.pkl', 'wb') as f:
-        #     pickle.dump(pts[0], f)
+    
         neighborhood, center = self.group_divider(pts)
-        # with open(f'patches/cluster/{i}/after.pkl', 'wb') as f:
-        #     pickle.dump(neighborhood[0], f)
         group_input_tokens = self.encoder(neighborhood)  # B G N
-        # self.plot_3d_scatter(pts[0])
+
         B, L, _ = group_input_tokens.shape
 
-        if self.cls_method == 'm1':
-            cls_tokens = self.cls_encoder(mainS.unsqueeze(1))
-        elif self.cls_method == 'm3':
-            cls_tokens = self.cls_encoder(mainS).unsqueeze(1)
-        elif self.cls_method == 'm4':
-            stream_embd = self.stream_encoder(mainS).unsqueeze(1).expand(-1,self.num_group,-1)
-            group_input_tokens = group_input_tokens + 0.4*stream_embd
-            cls_tokens = self.cls_token.expand(group_input_tokens.size(0), -1, -1)
-        elif self.cls_method == 'm5': # classifying left right and center positon
-            LRC_feat = self.cls_head_LRC(group_input_tokens.reshape(B, -1))
-            cls_tokens = self.cls_token.expand(group_input_tokens.size(0), -1, -1)
-        else:
-            cls_tokens = self.cls_token.expand(group_input_tokens.size(0), -1, -1)
-
-        cls_pos = self.cls_pos.expand(group_input_tokens.size(0), -1, -1)
+        cls_tokens = self.cls_token.expand(group_input_tokens.size(0), -1, -1)
 
         pos = self.pos_embed(center)
+        cls_pos = self.cls_pos.expand(group_input_tokens.size(0), -1, -1)
+        pos = torch.cat((cls_pos, pos), dim=1)
         sos_pos = self.sos_pos.expand(group_input_tokens.size(0), -1, -1)
         pos = torch.cat([sos_pos, pos], dim=1)
 
@@ -1010,31 +733,27 @@ class PointTransformer(nn.Module):
         position = torch.cat(
             [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
         pos_relative = self.pos_embed(position)
-
-        x = torch.cat((cls_tokens, group_input_tokens), dim=1)
-        pos = torch.cat((cls_pos, pos), dim=1)
+        # concatinating sos_pos and cls_pos, donot know if it works or not
+        pos_relative = torch.cat([sos_pos, cls_pos, pos_relative], dim=1)
 
         attn_mask = torch.full(
             (L+2, L+2), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
         ).to(torch.bool)
-
         attn_mask = torch.triu(attn_mask, diagonal=1)
+
+        x = torch.cat((cls_tokens, group_input_tokens), dim=1)
 
         # transformer
         ret, encoded_features, class_feat = self.blocks(x, pos, attn_mask, classify=True)
 
-        if self.cls_method == 'm2':
-            stream_ret = self.stream_encoder(mainS.unsqueeze(1)).squeeze(1)
-            ret = torch.cat([ret, stream_ret], dim=1)
-            ret = self.cls_head(ret)    
-        elif self.cls_method == 'm6':
-            LRC_feat = self.cls_head_LRC(ret)
+        # encoded_features = torch.cat(
+        #     [encoded_features[:, 0, :].unsqueeze(1), encoded_features[:, 2:-1, :]], dim=1)
 
-        encoded_features = torch.cat(
-            [encoded_features[:, 0, :].unsqueeze(1), encoded_features[:, 2:-1, :]], dim=1)
-
+        # attn_mask = torch.full(
+        #     (L, L), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
+        # ).to(torch.bool)
         attn_mask = torch.full(
-            (L, L), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
+            (L+2, L+2), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
         ).to(torch.bool)
 
         attn_mask = torch.triu(attn_mask, diagonal=1)
@@ -1047,14 +766,7 @@ class PointTransformer(nn.Module):
         gt_points = neighborhood.reshape(
             B*(self.num_group), self.group_size, 3)
 
-        g = generated_points.reshape(B, -1, 3)
-        g_t = gt_points.reshape(B, -1, 3)
-
         loss1 = self.loss_func_p1(generated_points, gt_points)
         loss2 = self.loss_func_p2(generated_points, gt_points)
-        if self.config.frechet_loss:
-            loss_frechet = self.loss_frechet(g, g_t)
-            print(loss_frechet, self.get_similarity_measure(g, g_t))
-        if self.cls_method == 'm6' or self.cls_method == 'm5':
-            return ret, loss1 + loss2, class_feat, LRC_feat
+
         return ret, loss1 + loss2, class_feat

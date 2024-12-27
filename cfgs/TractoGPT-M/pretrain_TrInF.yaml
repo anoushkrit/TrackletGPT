@@ -6,17 +6,17 @@ dataset:
   {
     train:
       {
-        _base_: cfgs/dataset_configs/qbx_goback_3L_TrInF.yaml,
+        _base_: cfgs/dataset_configs/single_streamline_TrInF.yaml,
         others: { subset: "trainset", npoints: 1024 },
       },
     val:
       {
-        _base_: cfgs/dataset_configs/qbx_goback_3L_TrInF.yaml,
+        _base_: cfgs/dataset_configs/single_streamline_TrInF.yaml,
         others: { subset: "validset", npoints: 1024 },
       },
     test:
       {
-        _base_: cfgs/dataset_configs/qbx_goback_3L_TrInF.yaml,
+        _base_: cfgs/dataset_configs/single_streamline_TrInF.yaml,
         others: { subset: "testset", npoints: 1024 },
       },
   }
