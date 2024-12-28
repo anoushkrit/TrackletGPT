@@ -48,7 +48,6 @@ class single_streamline_TrInF(Dataset):
         self.pts_per_sample = config.pts_per_sample
         self.label_mapping_path = config.label_mapping_path
         self.use_custom_batch = config.use_custom_batch 
-        self.subject_ids = config.subject_ids
 
         if self.subset == 'testset' or self.subset == 'validset':
             self.use_custom_batch = False
@@ -172,7 +171,8 @@ class single_streamline_TrInF(Dataset):
 
         # Using multiprocessing to parallelize the loading
         with Pool(processes=os.cpu_count()) as pool:
-            results = pool.map(self.load_subject, subject_data)
+            # results = pool.map(self.load_subject, subject_data).
+            results = list(tqdm(pool.imap(self.load_subject, subject_data), total=len(subject_data), desc='Loading Streamlines'))
 
         for subject_id, subject_streamlines, subject_labels in results:
             streamlines.extend(subject_streamlines)
@@ -195,7 +195,8 @@ class single_streamline_TrInF(Dataset):
         pts = self.points_per_streamline
         x = [(streamline, pts) for streamline in self.streamlines]
         with Pool(processes=os.cpu_count()) as pool:
-            resampled_streamlines = pool.map(choose_upORdownsample_streamline, x)
+            # resampled_streamlines = pool.map(choose_upORdownsample_streamline, x)
+            resampled_streamlines = list(tqdm(pool.imap(choose_upORdownsample_streamline, x), total=len(x), desc='Resampling Streamlines'))
         resampled_streamlines = np.array(resampled_streamlines)
 
         if self.subset != 'testset':

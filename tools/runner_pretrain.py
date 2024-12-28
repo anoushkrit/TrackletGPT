@@ -126,6 +126,7 @@ def run_net(args, config, train_writer=None, val_writer=None):
             data_time.update(time.time() - batch_start_time)
             npoints = config.dataset.train.others.npoints
             dataset_name = config.dataset.train._base_.NAME
+
             if config.total_bs > 1:
                 points = data.cuda()
             elif 'single_streamline' in dataset_name or 'goback_3L' in dataset_name:

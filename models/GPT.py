@@ -150,8 +150,8 @@ class GPT_generator(nn.Module):
 
         # skiping sos and cls token
         h = h[-self.num_groups:, :, :]
-        print(h.shape)
+        # rebuild_points = self.increase_dim(h.transpose(1, 2)).transpose(
+        #     1, 2).transpose(0, 1).reshape(batch * length, -1, 3)
         rebuild_points = self.increase_dim(h.transpose(1, 2)).transpose(
-            1, 2).transpose(0, 1).reshape(batch * length, -1, 3)
-
+            1, 2).transpose(0, 1).reshape(batch, self.num_groups, -1, 3)
         return rebuild_points
