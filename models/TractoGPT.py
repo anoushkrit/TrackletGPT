@@ -329,6 +329,8 @@ class GPT_Transformer(nn.Module):
 
         self.encoder_dims = config.transformer_config.encoder_dims
 
+        self.is_tracklet = config.is_tracklet
+
         assert self.encoder_dims in [256, 384, 768, 1024]
         if self.encoder_dims == 384 or self.encoder_dims == 256:
             self.encoder = Encoder_small(encoder_channel=self.encoder_dims)
@@ -357,6 +359,9 @@ class GPT_Transformer(nn.Module):
 
         # do not perform additional mask on the first (self.keep_attend) tokens
         self.keep_attend = 10
+        if config.keep_attend is not None:
+            self.keep_attend = config.keep_attend
+        
         self.num_groups = config.num_group
         self.num_mask = int(
             (self.num_groups - self.keep_attend) * self.mask_ratio)
@@ -379,9 +384,10 @@ class GPT_Transformer(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, neighborhood, center, noaug=False, classify=False):
+    def forward(self, neighborhood, center, padding=None, noaug=False, classify=False):
+        if self.is_tracklet and padding is None:
+            raise ValueError('padding is None in tracklet mode')
         # generate mask
-
         group_input_tokens = self.encoder(neighborhood)  # B G C
 
         batch_size, seq_len, C = group_input_tokens.size()
@@ -402,6 +408,7 @@ class GPT_Transformer(nn.Module):
         ).to(torch.bool)
 
         with torch.no_grad():
+            considered_tokens = torch.full((batch_size, seq_len), True).to(torch.bool).to('cuda')
             attn_mask = torch.triu(attn_mask, diagonal=1)
 
             # column wise
@@ -421,13 +428,20 @@ class GPT_Transformer(nn.Module):
 
             attn_mask = attn_mask | overall_mask.unsqueeze(0) & ~eye_mask
 
+            # key_padding_mask to handle the padding
+            key_padding_mask = None
+            if padding is not None:
+                key_padding_mask = torch.arange(seq_len).expand(batch_size, seq_len).to('cuda') >= padding.unsqueeze(1)
+                key_padding_mask = key_padding_mask.to(torch.bool)
+                considered_tokens = ~key_padding_mask
+
         # transformer
         if classify == False:
             encoded_features = self.blocks(
-                group_input_tokens, pos_absolute, attn_mask, classify=classify)
+                group_input_tokens, pos_absolute, attn_mask, key_padding_mask, classify=classify)
             generated_points = self.generator_blocks(
-                encoded_features, pos_relative, attn_mask)
-            return generated_points
+                encoded_features, pos_relative, attn_mask, key_padding_mask)
+            return generated_points, considered_tokens
         else:
             print('----error---- This code is detached ----error----')
             logits, generated_points = self.blocks(
@@ -448,6 +462,7 @@ class TractoGPT(nn.Module):
         self.drop_path_rate = config.transformer_config.drop_path_rate
         self.weight_center = config.weight_center
 
+        self.is_tracklet = config.is_tracklet
         print_log(
             f'[TractoGPT] divide point cloud into G{self.num_group} x S{self.group_size} points ...', logger='TractoGPT')
         self.group_divider = Group(
@@ -470,12 +485,16 @@ class TractoGPT(nn.Module):
         self.loss_func_c = nn.MSELoss().cuda()
 
     def forward(self, pts, vis=False, **kwargs):
-        neighborhood, center = self.group_divider(pts)
+        if self.is_tracklet:
+            neighborhood, center, padding = pts
+        else:
+            neighborhood, center = self.group_divider(pts)
+            padding = None
 
         B = neighborhood.shape[0]
 
-        generated_points = self.GPT_Transformer(
-            neighborhood, center)
+        generated_points, considered_tokens = self.GPT_Transformer(
+            neighborhood, center, padding)
 
         gt_points = neighborhood.reshape(
             B*(self.num_group), self.group_size, 3)
@@ -517,6 +536,8 @@ class PointTransformer(nn.Module):
 
         self.triplet_loss = config.triplet_loss
 
+        self.is_tracklet = config.is_tracklet
+
         self.group_divider = Group(
             num_group=self.num_group, group_size=self.group_size)
 
@@ -554,19 +575,6 @@ class PointTransformer(nn.Module):
 
         self.norm = nn.LayerNorm(self.trans_dim)
 
-        if self.cls_method == 'm1':
-            self.cls_encoder = Encoder_small(encoder_channel=self.trans_dim)
-        elif self.cls_method == 'm2':
-            self.stream_encoder = Encoder_small(encoder_channel=self.cls_dim)
-            self.cls_head = nn.Sequential(nn.Linear(self.cls_dim*2, self.cls_dim))
-        elif self.cls_method == 'm3':
-            self.cls_encoder = PointNetEncoder(encoder_channel=self.trans_dim)
-        elif self.cls_method == 'm4':
-            self.stream_encoder = PointNetEncoder(encoder_channel=self.trans_dim)
-        elif self.cls_method == 'm5':  # using left right and center information before GPT takes input
-            self.cls_head_LRC = nn.Sequential(nn.Linear(self.encoder_dims*self.num_group, 3))
-        elif self.cls_method == 'm6': # using left right and center information at last step after GPT output
-            self.cls_head_LRC = nn.Sequential(nn.Linear(self.cls_dim, 3), )
 
         self.build_loss_func()
 
@@ -687,8 +695,11 @@ class PointTransformer(nn.Module):
     
     
     def forward(self, pts):
-        
-        neighborhood, center = self.group_divider(pts)
+        if self.is_tracklet:
+            neighborhood, center, padding = pts
+        else:
+            neighborhood, center = self.group_divider(pts)
+            padding = None
         group_input_tokens = self.encoder(neighborhood)  # B G N
 
         B, L, _ = group_input_tokens.shape
@@ -713,11 +724,14 @@ class PointTransformer(nn.Module):
         attn_mask = torch.full(
             (L+2, L+2), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
         ).to(torch.bool)
-
         attn_mask = torch.triu(attn_mask, diagonal=1)
+        key_padding_mask = None
+        if self.is_tracklet:
+            key_padding_mask = torch.arange(L+2).expand(B, L+2) >= (padding.unsqueeze(1)+2)
+            key_padding_mask = key_padding_mask.to(torch.bool)
 
         # transformer
-        ret, encoded_features, class_feat = self.blocks(x, pos, attn_mask, classify=True)
+        ret, encoded_features, class_feat = self.blocks(x, pos, attn_mask, key_padding_mask, classify=True)
 
         encoded_features = torch.cat(
             [encoded_features[:, 0, :].unsqueeze(1), encoded_features[:, 2:-1, :]], dim=1)
@@ -725,19 +739,21 @@ class PointTransformer(nn.Module):
         attn_mask = torch.full(
             (L, L), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
         ).to(torch.bool)
-
         attn_mask = torch.triu(attn_mask, diagonal=1)
+        key_padding_mask = None
+        considered_tokens = torch.full((B, L), True).to(torch.bool)
+        if self.is_tracklet:
+            key_padding_mask = torch.arange(L).expand(B, L) >= padding.unsqueeze(1)
+            key_padding_mask = key_padding_mask.to(torch.bool)
+            considered_tokens = ~key_padding_mask
 
         generated_points = self.generator_blocks(
-            encoded_features, pos_relative, attn_mask)
+            encoded_features, pos_relative, attn_mask, key_padding_mask)
 
         neighborhood = neighborhood + center.unsqueeze(2)
 
         gt_points = neighborhood.reshape(
             B*(self.num_group), self.group_size, 3)
-
-        g = generated_points.reshape(B, -1, 3)
-        g_t = gt_points.reshape(B, -1, 3)
 
         loss1 = self.loss_func_p1(generated_points, gt_points)
         loss2 = self.loss_func_p2(generated_points, gt_points)

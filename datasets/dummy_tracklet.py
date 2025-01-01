@@ -29,8 +29,8 @@ class dummy_tracklet(Dataset):
         return 10000
 
     def __getitem__(self, index):
-        i = np.random.randint(0, 9)
-        padding = max(0, 8 - i)
+        i = np.random.randint(4, 9)
+        padding = i
         # padding = 0
         padding = torch.tensor(padding)
         # generating dummy tracklet and center with random values

@@ -139,8 +139,6 @@ def run_net(args, config, train_writer=None, val_writer=None):
             # assert points.size(1) == npoints
             # points = train_transforms(points)
             loss = base_model(points)
-            time.sleep(10)
-            print('loss:', loss.isnan().any())
 
             loss.backward()
 

@@ -17,11 +17,11 @@ class Block(nn.Module):
             nn.Linear(embed_dim * 4, embed_dim),
         )
 
-    def forward(self, x, attn_mask):
+    def forward(self, x, attn_mask, key_padding_mask):
 
         x = self.ln_1(x)
         # a, _ = self.attn(x, x, x, attn_mask=attn_mask, need_weights=False)
-        a, _ = self.attn(x, x, x, attn_mask=attn_mask, need_weights=False)
+        a, _ = self.attn(x, x, x, attn_mask=attn_mask, need_weights=False , key_padding_mask=key_padding_mask)
         x = x + a
         m = self.mlp(self.ln_2(x))
         x = x + m
@@ -67,7 +67,7 @@ class GPT_extractor(nn.Module):
 
             self.cls_norm = nn.LayerNorm(self.trans_dim)
 
-    def forward(self, h, pos, attn_mask, classify=False):
+    def forward(self, h, pos, attn_mask, key_padding_mask, classify=False):
         """
         Expect input as shape [sequence len, batch]
         If classify, return classification logits
@@ -86,7 +86,7 @@ class GPT_extractor(nn.Module):
 
         # transformer
         for layer in self.layers:
-            h = layer(h + pos, attn_mask)
+            h = layer(h + pos, attn_mask, key_padding_mask)
 
         h = self.ln_f(h)
 
@@ -124,7 +124,7 @@ class GPT_generator(nn.Module):
             nn.Conv1d(self.trans_dim, 3*(self.group_size), 1)
         )
 
-    def forward(self, h, pos, attn_mask):
+    def forward(self, h, pos, attn_mask, key_padding_mask=None):
         """
         Expect input as shape [sequence len, batch]
         If classify, return classification logits
@@ -136,7 +136,7 @@ class GPT_generator(nn.Module):
 
         # transformer
         for layer in self.layers:
-            h = layer(h + pos, attn_mask)
+            h = layer(h + pos, attn_mask, key_padding_mask)
 
         h = self.ln_f(h)
 
