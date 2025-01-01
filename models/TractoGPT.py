@@ -221,6 +221,7 @@ class Group(nn.Module):
         sorted_indices = all_indices + idx_base
         sorted_indices = sorted_indices.view(-1)
 
+    
     def forward(self, xyz):
         '''
             input: B N 3
@@ -260,6 +261,7 @@ class Group(nn.Module):
         # for i in range(10):
         #     self.plot_3d_point_cloud(center[i].cpu().numpy())
         return neighborhood, center
+
 
 class PositionEmbeddingCoordsSine(nn.Module):
     """Similar to transformer's position encoding, but generalizes it to
@@ -322,11 +324,7 @@ class GPT_Transformer(nn.Module):
         self.decoder_depth = config.transformer_config.decoder_depth
         self.drop_path_rate = config.transformer_config.drop_path_rate
         self.num_heads = config.transformer_config.num_heads
-
         self.group_size = config.group_size
-        self.num_groups = config.num_group
-
-        self.is_tracklet = config.is_tracklet
         print_log(f'[args] {config.transformer_config}', logger='Transformer')
 
         self.encoder_dims = config.transformer_config.encoder_dims
@@ -354,12 +352,12 @@ class GPT_Transformer(nn.Module):
             num_heads=self.num_heads,
             num_layers=self.decoder_depth,
             trans_dim=self.trans_dim,
-            group_size=self.group_size,
-            num_groups=self.num_groups,
+            group_size=self.group_size
         )
 
         # do not perform additional mask on the first (self.keep_attend) tokens
         self.keep_attend = 10
+        self.num_groups = config.num_group
         self.num_mask = int(
             (self.num_groups - self.keep_attend) * self.mask_ratio)
 
@@ -381,33 +379,31 @@ class GPT_Transformer(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, neighborhood, center, padding_len=None, noaug=False, classify=False):
+    def forward(self, neighborhood, center, noaug=False, classify=False):
+        # generate mask
+
         group_input_tokens = self.encoder(neighborhood)  # B G C
 
         batch_size, seq_len, C = group_input_tokens.size()
 
-        sos_pos = self.sos_pos.expand(batch_size, -1, -1)
         relative_position = center[:, 1:, :] - center[:, :-1, :]
         relative_norm = torch.norm(relative_position, dim=-1, keepdim=True)
         relative_direction = relative_position / relative_norm
         position = torch.cat(
             [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
         pos_relative = self.pos_embed(position)
-        pos_relative = torch.cat([sos_pos, pos_relative], dim=1) # +1 for sos token
 
-        # pos_absolute = self.pos_embed(center[:, :-1, :])
-        pos_absolute = self.pos_embed(center)
-        # print('pos_absolute', pos_absolute.shape)
-        # print('sos_pos', sos_pos.shape)
+        sos_pos = self.sos_pos.expand(batch_size, -1, -1)
+        pos_absolute = self.pos_embed(center[:, :-1, :])
         pos_absolute = torch.cat([sos_pos, pos_absolute], dim=1)
 
-        # attn_mask = torch.full(
-        #     (seq_len, seq_len), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
-        # ).to(torch.bool)
-        considered_tokens = torch.ones((batch_size, seq_len), dtype=torch.bool, device=group_input_tokens.device)
-        attn_mask = torch.triu(torch.ones((seq_len+1, seq_len+1), dtype=torch.bool, device=group_input_tokens.device), diagonal=1)
+        attn_mask = torch.full(
+            (seq_len, seq_len), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
+        ).to(torch.bool)
+
         with torch.no_grad():
             attn_mask = torch.triu(attn_mask, diagonal=1)
+
             # column wise
             overall_mask = np.hstack([
                 np.zeros(self.num_groups-self.keep_attend-self.num_mask),
@@ -415,27 +411,15 @@ class GPT_Transformer(nn.Module):
             ])
             np.random.shuffle(overall_mask)
             overall_mask = np.hstack([
-                np.zeros(1+self.keep_attend), # +1 for sos token
+                np.zeros(self.keep_attend),
                 overall_mask,
             ])
             overall_mask = torch.from_numpy(
                 overall_mask).to(torch.bool).to('cuda')
 
-            eye_mask = torch.eye(self.num_groups+1).to(torch.bool).to('cuda')
+            eye_mask = torch.eye(self.num_groups).to(torch.bool).to('cuda')
 
-            # attn_mask = attn_mask | overall_mask.unsqueeze(0) & ~eye_mask
-            attn_mask = attn_mask | overall_mask.unsqueeze(0) & eye_mask
-            attn_mask[:, 0] = False
-
-            if self.is_tracklet:
-                masking = torch.ones((batch_size, seq_len+1, seq_len+1), dtype=torch.bool, device=group_input_tokens.device)
-                for batch in range(batch_size):
-                    masking[batch, :, :-padding_len[batch]] = False
-                
-                considered_tokens = ~masking[:, 0, 1:] # B N
-                
-                attn_mask = attn_mask.unsqueeze(0) | masking
-
+            attn_mask = attn_mask | overall_mask.unsqueeze(0) & ~eye_mask
 
         # transformer
         if classify == False:
@@ -443,7 +427,7 @@ class GPT_Transformer(nn.Module):
                 group_input_tokens, pos_absolute, attn_mask, classify=classify)
             generated_points = self.generator_blocks(
                 encoded_features, pos_relative, attn_mask)
-            return generated_points, considered_tokens
+            return generated_points
         else:
             print('----error---- This code is detached ----error----')
             logits, generated_points = self.blocks(
@@ -461,7 +445,6 @@ class TractoGPT(nn.Module):
         self.GPT_Transformer = GPT_Transformer(config)
         self.group_size = config.group_size
         self.num_group = config.num_group
-
         self.drop_path_rate = config.transformer_config.drop_path_rate
         self.weight_center = config.weight_center
 
@@ -491,14 +474,10 @@ class TractoGPT(nn.Module):
 
         B = neighborhood.shape[0]
 
-        generated_points, considered_tokens = self.GPT_Transformer(
+        generated_points = self.GPT_Transformer(
             neighborhood, center)
 
-        gt_points = neighborhood*considered_tokens.unsqueeze(-1).unsqueeze(-1)
-        generated_points = generated_points*considered_tokens.unsqueeze(-1).unsqueeze(-1)
-        generated_points = generated_points.reshape(
-            B*self.num_group, self.group_size, 3)
-        gt_points = gt_points.reshape(
+        gt_points = neighborhood.reshape(
             B*(self.num_group), self.group_size, 3)
         loss1 = self.loss_func_p1(generated_points, gt_points)
         loss2 = self.loss_func_p2(generated_points, gt_points)
@@ -530,13 +509,13 @@ class PointTransformer(nn.Module):
         self.drop_path_rate = config.drop_path_rate
         self.cls_dim = config.cls_dim
         self.num_heads = config.num_heads
+        self.cls_method = config.cls_method
 
         self.group_size = config.group_size
         self.num_group = config.num_group
         self.encoder_dims = config.encoder_dims
 
         self.triplet_loss = config.triplet_loss
-        self.is_tracklet = config.is_tracklet
 
         self.group_divider = Group(
             num_group=self.num_group, group_size=self.group_size)
@@ -563,9 +542,10 @@ class PointTransformer(nn.Module):
             num_heads=self.num_heads,
             num_layers=self.decoder_depth,
             trans_dim=self.trans_dim,
-            group_size=self.group_size,
-            num_groups=self.num_group,
+            group_size=self.group_size
         )
+
+        self.norm = nn.LayerNorm(self.trans_dim)
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.trans_dim))
         self.cls_pos = nn.Parameter(torch.randn(1, 1, self.trans_dim))
@@ -573,6 +553,20 @@ class PointTransformer(nn.Module):
         self.sos_pos = nn.Parameter(torch.zeros(1, 1, self.trans_dim))
 
         self.norm = nn.LayerNorm(self.trans_dim)
+
+        if self.cls_method == 'm1':
+            self.cls_encoder = Encoder_small(encoder_channel=self.trans_dim)
+        elif self.cls_method == 'm2':
+            self.stream_encoder = Encoder_small(encoder_channel=self.cls_dim)
+            self.cls_head = nn.Sequential(nn.Linear(self.cls_dim*2, self.cls_dim))
+        elif self.cls_method == 'm3':
+            self.cls_encoder = PointNetEncoder(encoder_channel=self.trans_dim)
+        elif self.cls_method == 'm4':
+            self.stream_encoder = PointNetEncoder(encoder_channel=self.trans_dim)
+        elif self.cls_method == 'm5':  # using left right and center information before GPT takes input
+            self.cls_head_LRC = nn.Sequential(nn.Linear(self.encoder_dims*self.num_group, 3))
+        elif self.cls_method == 'm6': # using left right and center information at last step after GPT output
+            self.cls_head_LRC = nn.Sequential(nn.Linear(self.cls_dim, 3), )
 
         self.build_loss_func()
 
@@ -588,9 +582,9 @@ class PointTransformer(nn.Module):
         elif loss_type == 'cdl12':
             self.loss_func_p1 = ChamferDistanceL1().cuda()
             self.loss_func_p2 = ChamferDistanceL2().cuda()
+            print('cdl12')
         else:
             raise NotImplementedError
-        self.loss_triplet = nn.TripletMarginLoss(margin=23.0, p=2)
 
     def get_triplet(self, labels, feat):
         anchors = []
@@ -638,13 +632,7 @@ class PointTransformer(nn.Module):
         pred = ret.argmax(-1)
         acc = (pred == gt).sum() / float(gt.size(0))
 
-        if self.triplet_loss: # Triplet loss if apllied
-            anchor, positive, negative = self.get_triplet(gt, class_feat)
-            triplet_loss = self.loss_triplet(anchor, positive, negative)
-        else:
-            triplet_loss = 0
-        
-        return loss + triplet_loss, acc * 100
+        return loss, acc * 100
 
     def load_model_from_ckpt(self, bert_ckpt_path):
         if bert_ckpt_path is not None:
@@ -697,20 +685,18 @@ class PointTransformer(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
     
+    
     def forward(self, pts):
-        if self.is_tracklet:
-            neighborhood, center, padding_len = pts
-        if not self.is_tracklet:
-            neighborhood, center = self.group_divider(pts)
+        
+        neighborhood, center = self.group_divider(pts)
         group_input_tokens = self.encoder(neighborhood)  # B G N
 
         B, L, _ = group_input_tokens.shape
 
         cls_tokens = self.cls_token.expand(group_input_tokens.size(0), -1, -1)
+        cls_pos = self.cls_pos.expand(group_input_tokens.size(0), -1, -1)
 
         pos = self.pos_embed(center)
-        cls_pos = self.cls_pos.expand(group_input_tokens.size(0), -1, -1)
-        pos = torch.cat((cls_pos, pos), dim=1)
         sos_pos = self.sos_pos.expand(group_input_tokens.size(0), -1, -1)
         pos = torch.cat([sos_pos, pos], dim=1)
 
@@ -720,58 +706,40 @@ class PointTransformer(nn.Module):
         position = torch.cat(
             [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
         pos_relative = self.pos_embed(position)
-        # concatinating sos_pos and cls_pos, donot know if it works or not
-        pos_relative = torch.cat([sos_pos, cls_pos, pos_relative], dim=1)
-
-        # attn_mask = torch.full(
-        #     (L+2, L+2), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
-        # ).to(torch.bool)
-        # attn_mask = torch.triu(attn_mask, diagonal=1)
-        considered_tokens = torch.ones((B, L), dtype=torch.bool, device=group_input_tokens.device)
-        attn_mask = torch.triu(torch.ones((L+2, L+2), dtype=torch.bool, device=group_input_tokens.device), diagonal=1)
-        if self.is_tracklet:
-            masking = torch.ones((B, L+2, L+2), dtype=torch.bool, device=group_input_tokens.device)
-            for batch in range(B):
-                masking[batch, :, :-padding_len[batch]] = False
-            attn_mask = attn_mask.unsqueeze(0) | masking
-
-            considered_tokens = ~masking[:, 0, 2:]
-        
 
         x = torch.cat((cls_tokens, group_input_tokens), dim=1)
+        pos = torch.cat((cls_pos, pos), dim=1)
+
+        attn_mask = torch.full(
+            (L+2, L+2), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
+        ).to(torch.bool)
+
+        attn_mask = torch.triu(attn_mask, diagonal=1)
 
         # transformer
         ret, encoded_features, class_feat = self.blocks(x, pos, attn_mask, classify=True)
 
-        # encoded_features = torch.cat(
-        #     [encoded_features[:, 0, :].unsqueeze(1), encoded_features[:, 2:-1, :]], dim=1)
+        encoded_features = torch.cat(
+            [encoded_features[:, 0, :].unsqueeze(1), encoded_features[:, 2:-1, :]], dim=1)
 
-        # attn_mask = torch.full(
-        #     (L, L), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
-        # ).to(torch.bool)
-        # attn_mask = torch.triu(torch.ones((L+2, L+2), dtype=torch.bool, device=group_input_tokens.device), diagonal=1)
-        # if self.is_tracklet:
-        #     masking = torch.ones((B, L+2, L+2), dtype=torch.bool, device=group_input_tokens.device)
-        #     for batch in range(B):
-        #         masking[batch, :, :-padding_len[batch]] = False
-        #     attn_mask = attn_mask.unsqueeze(0) | masking
+        attn_mask = torch.full(
+            (L, L), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
+        ).to(torch.bool)
 
+        attn_mask = torch.triu(attn_mask, diagonal=1)
 
         generated_points = self.generator_blocks(
             encoded_features, pos_relative, attn_mask)
 
-        generated_points = generated_points*considered_tokens.unsqueeze(-1).unsqueeze(-1)
-        gt_points = neighborhood*considered_tokens.unsqueeze(-1).unsqueeze(-1)
-
         neighborhood = neighborhood + center.unsqueeze(2)
 
-        generated_points = generated_points.reshape(
-            B*self.num_group, self.group_size, 3)
-        gt_points = gt_points.reshape(
+        gt_points = neighborhood.reshape(
             B*(self.num_group), self.group_size, 3)
 
-        # print(generated_points.shape, gt_points.shape)
+        g = generated_points.reshape(B, -1, 3)
+        g_t = gt_points.reshape(B, -1, 3)
+
         loss1 = self.loss_func_p1(generated_points, gt_points)
         loss2 = self.loss_func_p2(generated_points, gt_points)
-
+        
         return ret, loss1 + loss2, class_feat

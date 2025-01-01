@@ -128,16 +128,19 @@ def run_net(args, config, train_writer=None, val_writer=None):
             dataset_name = config.dataset.train._base_.NAME
 
             if config.total_bs > 1:
-                points = data.cuda()
+                # points = data.cuda()
+                points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
             elif 'single_streamline' in dataset_name or 'goback_3L' in dataset_name:
                 points = data.squeeze().cuda()
             else:
                 raise NotImplementedError(
                     f'Train phase do not support {dataset_name}')
 
-            assert points.size(1) == npoints
-            points = train_transforms(points)
+            # assert points.size(1) == npoints
+            # points = train_transforms(points)
             loss = base_model(points)
+            time.sleep(10)
+            print('loss:', loss.isnan().any())
 
             loss.backward()
 

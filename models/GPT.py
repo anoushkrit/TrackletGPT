@@ -79,11 +79,10 @@ class GPT_extractor(nn.Module):
 
         # prepend sos token
         sos = torch.ones(1, batch, self.embed_dim, device=h.device) * self.sos
-
-        # if not classify:
-        #     h = torch.cat([sos, h[:-1, :, :]], axis=0)
-        # else:
-        h = torch.cat([sos, h], axis=0) # always using all patches, including sos
+        if not classify:
+            h = torch.cat([sos, h[:-1, :, :]], axis=0)
+        else:
+            h = torch.cat([sos, h], axis=0)
 
         # transformer
         for layer in self.layers:
@@ -104,24 +103,17 @@ class GPT_extractor(nn.Module):
 
 class GPT_generator(nn.Module):
     def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        num_layers,
-        trans_dim,
-        group_size,
-        num_groups
+        self, embed_dim, num_heads, num_layers, trans_dim, group_size
     ):
         super(GPT_generator, self).__init__()
 
         self.embed_dim = embed_dim
         self.trans_dim = trans_dim
         self.group_size = group_size
-        self.num_groups = num_groups
 
         # start of sequence token
-        # self.sos = torch.nn.Parameter(torch.zeros(embed_dim))
-        # nn.init.normal_(self.sos)
+        self.sos = torch.nn.Parameter(torch.zeros(embed_dim))
+        nn.init.normal_(self.sos)
 
         self.layers = nn.ModuleList()
         for _ in range(num_layers):
@@ -148,10 +140,7 @@ class GPT_generator(nn.Module):
 
         h = self.ln_f(h)
 
-        # skiping sos and cls token
-        h = h[-self.num_groups:, :, :]
-        # rebuild_points = self.increase_dim(h.transpose(1, 2)).transpose(
-        #     1, 2).transpose(0, 1).reshape(batch * length, -1, 3)
         rebuild_points = self.increase_dim(h.transpose(1, 2)).transpose(
-            1, 2).transpose(0, 1).reshape(batch, self.num_groups, -1, 3)
+            1, 2).transpose(0, 1).reshape(batch * length, -1, 3)
+
         return rebuild_points
