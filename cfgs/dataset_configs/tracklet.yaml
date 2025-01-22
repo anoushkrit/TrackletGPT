@@ -1,0 +1,6 @@
+NAME: Tracklet
+data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/
+split: test
+dataset: 105HCP
+sample_per_subject: 1000
+sample_per_class: 100
