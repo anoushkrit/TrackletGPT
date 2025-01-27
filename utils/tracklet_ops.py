@@ -12,10 +12,10 @@ def find_matching_indices(arr1, arr2):
             match_array.append(matches[0])
     return match_array
 
-def remove_empty_tracks(self, tracklets):
+def remove_empty_tracks(tracklets):
     return [tracklet for tracklet in tracklets if tracklet.shape[0] != 0]
     
-def get_tracklets(self, indices, streamline, overlap = 0):
+def get_tracklets(indices, streamline, overlap = 0):
         tracklets = [] 
         pad=False 
         interpolate_tracklets = True
@@ -48,8 +48,17 @@ def get_tracklet_from_streamline(streamline, apt_param=0.4) -> list:
 
     # find indices of crucial points in the streamline in most optimal way
     crucial_point_indices = find_matching_indices(streamline, crucial_points)
+    # print(crucial_point_indices)
+    # remove crucial point if they are adjacent
+    for i in range(len(crucial_point_indices)-1, 1, -1):
+        if crucial_point_indices[i] - crucial_point_indices[i-1] <= 1:
+            crucial_point_indices.pop(i)
 
     # get tracklets from the streamline
     tracklets, tracklet_indices = get_tracklets(crucial_point_indices, streamline, overlap=2)
+    for i in range(len(tracklets)):
+        if len(tracklets[i]) == 1:
+            print(crucial_point_indices)
+            print(len(tracklets), i)
 
     return tracklets

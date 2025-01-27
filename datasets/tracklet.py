@@ -9,6 +9,8 @@ import copy
 from pathlib import Path
 from hashlib import sha256
 from multiprocessing import Pool
+import plotly.graph_objs as go
+import plotly.express as px
 
 # Third-party libraries
 import numpy as np
@@ -19,11 +21,47 @@ from torch.utils.data import Dataset
 
 # Project-specific imports
 from .build import DATASETS
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.logger import *
 from utils.config import cfg_from_yaml_file
 from utils.tracklet_ops import get_tracklet_from_streamline
 from utils.streamline_ops import interpolate_streamline
 
+def plotting_tracklet(tracklet, file_name="default", title="Tracklet"):
+    """
+    Plots multiple 3D streamlines using Plotly.
+
+    Parameters:
+        streamlines (list of lists): A list of streamlines, where each streamline is a list of 3D coordinates.
+                                     Each coordinate should be a list or tuple of (x, y, z).
+        labels (list): A list of labels corresponding to each streamline.
+        title (str): The title of the plot.
+    """
+    
+    fig = go.Figure()
+    # print(tracklet.shape)
+    for track in tracklet:
+        track = list(zip(*track))  # Transpose to get x, y, z components
+        fig.add_trace(go.Scatter3d(
+            x=track[0],
+            y=track[1],
+            z=track[2],
+            mode='markers',
+        ))
+
+    fig.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title='X',
+            yaxis_title='Y',
+            zaxis_title='Z'
+        ),
+        legend=dict(
+            title="Labels"
+        )
+    )
+    
+    fig.write_html(f"{file_name}.html")
 
 def load_stream(trk_path):
     """ Load streamlines from a SINGLE .trk file. """
@@ -36,12 +74,27 @@ class Tracklet(Dataset):
         self.config = config
 
         self.data_dir = config.data_dir
-        self.split = config.split
+        self.split = config.subset
         self.dataset = config.dataset
 
         self.sample_per_subject = config.sample_per_subject
         self.samples_per_class = config.samples_per_class
+        self.test_subjects = config.get('test_subjects', None)
 
+        self.max_num_tokens = config.max_num_tokens
+        self.label_to_int_mapping_path = config.label_to_int_mapping_path
+
+        self.patch_size = 12
+
+        self.label_to_int_mapping = self.load_json(self.label_to_int_mapping_path)
+        self.load_streamlines_mp()
+
+
+    def load_json(self, path):
+        with open(path, 'r') as f:
+            json_data = json.load(f)
+        return json_data
+    
     def hash_streamline(self, streamline):
         return sha256(streamline.tobytes()).hexdigest()
     
@@ -66,8 +119,8 @@ class Tracklet(Dataset):
             elif dataset == '105HCP':
                 class_name = clss.stem
             
-            # if class_name not in self.label_int_mapping.keys():
-            #     continue
+            if class_name not in self.label_to_int_mapping.keys():
+                continue
             
             if dataset == 'TracktoInferno':
                 cls_path = os.path.join(data_path, subject, 'tractography', clss)
@@ -107,6 +160,7 @@ class Tracklet(Dataset):
                 raise ValueError("If data_dir is a string, split and dataset must also be a string.")
             data_paths = [os.path.join(self.data_dir, self.split)]
             datasets = [self.dataset]
+            self.split = [self.split]
 
         streamlines = []
         subject_ids = []
@@ -118,12 +172,15 @@ class Tracklet(Dataset):
             subjects_ = [subject for subject in os.listdir(data_path)
                          if os.path.isdir(os.path.join(data_path, subject))]
             if self.split[i] == 'test' or self.split[i] == 'testset':
-                subjects_ = [subject for subject in subjects_ if subject in self.test_subjects]
+                print(self.test_subjects)
+                subjects_ = [subject for subject in subjects_ if self.test_subjects is None or subject in self.test_subjects]
             subjects.extend(subjects_)
 
             subject_data_ = [(subject, data_path, datasets[i], self.sample_per_subject, self.samples_per_class)
                              for subject in subjects_]
             subject_data.extend(subject_data_)
+        
+        print(subject_data)
         
 
         # Using multiprocessing to parallelize the loading of streamlines
@@ -140,19 +197,84 @@ class Tracklet(Dataset):
         # self.labels = np.array(labels)
         self.labels = labels
 
+    def zero_padding(self, tracklet):
+        """ Zero pads the tracklet to the maximum number of tokens. """
+        if len(tracklet) < self.max_num_tokens:
+            padding = self.max_num_tokens - len(tracklet)
+            tracklet = np.concatenate((tracklet, np.zeros((padding, self.patch_size, 3))), axis=0)
+        return tracklet
+    
+    def pad_with_noise(self, tracklet):
+        """ Zero pads the tracklet with noise to the maximum number of tokens. """
+        if len(tracklet) < self.max_num_tokens:
+            padding = self.max_num_tokens - len(tracklet)
+            noise = np.random.normal(0, 1e-4, (padding, self.patch_size, 3))
+            tracklet = np.concatenate((tracklet, noise), axis=0)
+        return tracklet
+    
+    # padding the remaining tracklet by repeating the last element
+    def repeat_last_padding(self, tracklet):
+        """ Repeats the last element of the tracklet to pad it to the maximum number of tokens. """
+        if len(tracklet) < self.max_num_tokens:
+            padding = self.max_num_tokens - len(tracklet)
+            tracklet = np.concatenate((tracklet, np.tile(tracklet[-1], (padding, 1, 1))), axis=0)
+        return tracklet
+    
+    # repeat all the tracklets to the maximum number of tokens
+    def repeat_all_padding(self, tracklet):
+        """ Repeats the complete tracklet to pad it to the maximum number of tokens. """
+        if len(tracklet) < self.max_num_tokens:
+            padding = self.max_num_tokens - len(tracklet)
+            num_tracklets = len(tracklet)
+            complete_reps = padding // num_tracklets
+            partial_rep = padding % num_tracklets
+            tracklet = np.concatenate((tracklet, np.tile(tracklet, (complete_reps, 1, 1))), axis=0)
+            tracklet = np.concatenate((tracklet, tracklet[:partial_rep]), axis=0)
+        return tracklet
+    
+    def pc_norm(self, pc):
+        """ pc: NxC, return NxC """
+        centroid = np.mean(pc, axis=0)
+        pc = pc - centroid
+        m = np.max(np.sqrt(np.sum(pc**2, axis=1)))
+        pc = pc / m
+        return pc
+    
     def __getitem__(self, index):
         """ returns tracklet of a single streamline with necessary padding
             and corresponding label """
         streamline = self.streamlines[index]
         label = self.labels[index]
-        streamline = interpolate_streamline(streamline, 64)
-        tracklet = get_tracklet_from_streamline(streamline)
-        tracklet = np.array([interpolate_streamline(tracklet[i], 10) for i in range(len(tracklet))])
-        return tracklet, label
+        label = self.label_to_int_mapping[label]
+
+        # getting tracklet from streamline
+        streamline = interpolate_streamline((streamline, 64))
+        streamline = self.pc_norm(streamline)
+        tracklet = get_tracklet_from_streamline(streamline, apt_param=.4)
+        tracklet = np.array([interpolate_streamline((tracklet[i], self.patch_size)) for i in range(len(tracklet))])
+
+        # zero padding
+        padding = len(tracklet)
+        tracklet = self.zero_padding(tracklet)
+        # tracklet = self.repeat_last_padding(tracklet)
+        # tracklet = self.repeat_all_padding(tracklet)
+        # tracklet = self.pad_with_noise(tracklet)
+
+        # normalizing tracklet with respect to the center points
+        tracklet_center = np.median(tracklet, axis=1)
+        tracklet = tracklet - tracklet_center[:, None, :]
+
+        # plotting_tracklet(tracklet, file_name="tracklet")
+        # plotting_tracklet(tracklet_center[:,None,:], file_name="tracklet_center")
+        return np.float32(label),0,(torch.from_numpy(tracklet).float(), torch.from_numpy(tracklet_center).float(), np.float32(padding))
     def __len__(self):
         return len(self.streamlines)
 
-
-yaml_file = "cfgs/dataset_configs/tracklet.yaml"
-config = cfg_from_yaml_file(yaml_file)
-dataset = Tracklet(config)
+# yaml_file = "cfgs/dataset_configs/tracklet.yaml"
+# config = cfg_from_yaml_file(yaml_file)
+# dataset = Tracklet(config)
+# tracklet, tracklet_center, padding = dataset[100]
+# x = tracklet_center[:,None,:][:padding]
+# print(tracklet.shape)
+# print(x.shape)
+# plotting_tracklet(x)

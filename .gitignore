@@ -175,3 +175,6 @@ data/
 
 # experiments
 experiment*/
+
+# pkls
+*.pkl

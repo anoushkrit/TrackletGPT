@@ -15,7 +15,7 @@ from collections import Counter, defaultdict
 from tqdm import tqdm
 from scipy.interpolate import CubicSpline
 # import open3d as o3d
-from dipy.viz import window, actor
+# from dipy.viz import window, actor
 #%% 
 
 def visualise_bundle(viz_tracks, name, interactive, separate=True ):

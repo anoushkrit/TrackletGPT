@@ -129,7 +129,7 @@ def run_net(args, config, train_writer=None, val_writer=None):
             data_time.update(time.time() - batch_start_time)
             
             if config.total_bs > 1:
-                points = data.cuda()
+                points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
                 label = taxonomy_ids.cuda()
             elif 'goback_3L' in dataset_name or 'single_streamline' in dataset_name:
                 points = data.squeeze().cuda()
@@ -151,17 +151,17 @@ def run_net(args, config, train_writer=None, val_writer=None):
                 point_all = npoints
                 # raise NotImplementedError()
 
-            if points.size(1) < point_all:
-                point_all = points.size(1)
+            # if points.size(1) < point_all:
+            #     point_all = points.size(1)
 
-            fps_idx = pointnet2_utils.furthest_point_sample(
-                points, point_all)  # (B, npoint)
+            # fps_idx = pointnet2_utils.furthest_point_sample(
+            #     points, point_all)  # (B, npoint)
 
-            fps_idx = fps_idx[:, np.random.choice(point_all, npoints, False)]
-            points = pointnet2_utils.gather_operation(points.transpose(
-                1, 2).contiguous(), fps_idx).transpose(1, 2).contiguous()  # (B, N, 3)
+            # fps_idx = fps_idx[:, np.random.choice(point_all, npoints, False)]
+            # points = pointnet2_utils.gather_operation(points.transpose(
+            #     1, 2).contiguous(), fps_idx).transpose(1, 2).contiguous()  # (B, N, 3)
             # import pdb; pdb.set_trace()
-            points = train_transforms(points)
+            # points = train_transforms(points)
 
             # if dataset_name == 'streamPC':
             #     mainS = train_transforms(mainS)
@@ -277,7 +277,7 @@ def validate(base_model, test_dataloader, epoch, val_writer, args, config, logge
             dataset_name = config.dataset.train._base_.NAME
             
             if 1:
-                points = data.cuda()
+                points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
                 label = taxonomy_ids.cuda()
             elif dataset_name == 's3FSSknn' or dataset_name == 's3FSSknnLRC' or dataset_name == 's3FSSknnTrInF' or 'single_streamline' in dataset_name or 'goback_3L' in dataset_name:
                 points = data.squeeze().cuda()
@@ -297,7 +297,7 @@ def validate(base_model, test_dataloader, epoch, val_writer, args, config, logge
                 points = data[0].cuda()
                 label = data[1].cuda()
 
-            points = misc.fps(points, npoints)
+            # points = misc.fps(points, npoints)
 
             if dataset_name == 'streamPC':
                 logits, loss1, class_feat = base_model((mainS, points))
@@ -472,7 +472,7 @@ def test(base_model, test_dataloader, args, config, logger=None):
         for idx, (taxonomy_ids, extra_info, data) in enumerate(test_dataloader):
             # print(type(extra_info), type(extra_info[0]), type(extra_info[1]), type(extra_info[0][0]))
             if config.total_bs > 1:
-                points = data.cuda()
+                points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
                 label = taxonomy_ids.cuda()
             elif 'single_streamline' in dataset_name or 'goback_3L' in dataset_name:
                 points = data.squeeze().cuda()
@@ -480,9 +480,9 @@ def test(base_model, test_dataloader, args, config, logger=None):
             else:
                 points = data.cuda()
                 label = taxonomy_ids.cuda()
-            points = misc.fps(points, npoints)
+            # points = misc.fps(points, npoints)
 
-
+            
             logits, loss1, class_feat = base_model(points)
             target = label.view(-1)
 

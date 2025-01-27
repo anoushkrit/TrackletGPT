@@ -389,14 +389,25 @@ class GPT_Transformer(nn.Module):
             raise ValueError('padding is None in tracklet mode')
         # generate mask
         group_input_tokens = self.encoder(neighborhood)  # B G C
-
         batch_size, seq_len, C = group_input_tokens.size()
 
         relative_position = center[:, 1:, :] - center[:, :-1, :]
         relative_norm = torch.norm(relative_position, dim=-1, keepdim=True)
         relative_direction = relative_position / relative_norm
+        # print('nan in relative direction', torch.isnan(relative_direction).nonzero())
+        # for i in range(0,len(torch.isnan(relative_direction).nonzero()),3):
+        #     print(padding[i])
+        
         position = torch.cat(
             [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
+        # if self.is_tracklet:
+        #     # print(padding.shape)
+        #     # print(position.shape)
+        #     for i in range(batch_size):
+        #         position[i, int(padding[i]):, :] = 0
+        # print('nan in position', torch.isnan(position).any())   
+        # print('nan in position', torch.isnan(position).nonzero())         
+
         pos_relative = self.pos_embed(position)
 
         sos_pos = self.sos_pos.expand(batch_size, -1, -1)
@@ -408,7 +419,6 @@ class GPT_Transformer(nn.Module):
         ).to(torch.bool)
 
         with torch.no_grad():
-            considered_tokens = torch.full((batch_size, seq_len), True).to(torch.bool).to('cuda')
             attn_mask = torch.triu(attn_mask, diagonal=1)
 
             # column wise
@@ -430,17 +440,30 @@ class GPT_Transformer(nn.Module):
 
             # key_padding_mask to handle the padding
             key_padding_mask = None
+            considered_tokens = torch.full((batch_size, seq_len), True).to(torch.bool).to('cuda')
             if padding is not None:
+                # create the key_padding_mask
                 key_padding_mask = torch.arange(seq_len).expand(batch_size, seq_len).to('cuda') >= padding.unsqueeze(1)
                 key_padding_mask = key_padding_mask.to(torch.bool)
                 considered_tokens = ~key_padding_mask
 
+                # modifying pos_absolute and pos_relative
+                pos_absolute[key_padding_mask] = 0
+                pos_relative[key_padding_mask] = 0
+                # print(pos_relative[0])
+
+        if torch.isnan(group_input_tokens).any() or torch.isnan(pos_absolute).any() or torch.isnan(pos_relative).any():
+            print('nan in group_input_tokens', torch.isnan(group_input_tokens).any())
+            print('nan in pos_absolute', torch.isnan(pos_absolute).any())
+            print('nan in pos_relative', torch.isnan(pos_relative).any())
         # transformer
         if classify == False:
             encoded_features = self.blocks(
                 group_input_tokens, pos_absolute, attn_mask, key_padding_mask, classify=classify)
+            # print('nan in encoded_features', torch.isnan(encoded_features).any())
             generated_points = self.generator_blocks(
                 encoded_features, pos_relative, attn_mask, key_padding_mask)
+            # print('nan in generated_points', torch.isnan(generated_points).any())
             return generated_points, considered_tokens
         else:
             print('----error---- This code is detached ----error----')
@@ -491,6 +514,10 @@ class TractoGPT(nn.Module):
             neighborhood, center = self.group_divider(pts)
             padding = None
 
+        # print('nan in neighborhood', torch.isnan(neighborhood).any())
+        # print('nan in center', torch.isnan(center).any())
+        # print('nan in padding', torch.isnan(padding).any())
+        # print(neighborhood.shape, center.shape, padding.shape)
         B = neighborhood.shape[0]
 
         generated_points, considered_tokens = self.GPT_Transformer(
@@ -498,6 +525,12 @@ class TractoGPT(nn.Module):
 
         gt_points = neighborhood.reshape(
             B*(self.num_group), self.group_size, 3)
+        
+        # only using considered_tokens for loss calculation
+        considered_tokens = considered_tokens.reshape(B*self.num_group)
+        gt_points = gt_points[considered_tokens]
+        generated_points = generated_points[considered_tokens]
+        
         loss1 = self.loss_func_p1(generated_points, gt_points)
         loss2 = self.loss_func_p2(generated_points, gt_points)
 
@@ -528,7 +561,7 @@ class PointTransformer(nn.Module):
         self.drop_path_rate = config.drop_path_rate
         self.cls_dim = config.cls_dim
         self.num_heads = config.num_heads
-        self.cls_method = config.cls_method
+        # self.cls_method = config.cls_method
 
         self.group_size = config.group_size
         self.num_group = config.num_group
@@ -704,11 +737,11 @@ class PointTransformer(nn.Module):
 
         B, L, _ = group_input_tokens.shape
 
-        cls_tokens = self.cls_token.expand(group_input_tokens.size(0), -1, -1)
-        cls_pos = self.cls_pos.expand(group_input_tokens.size(0), -1, -1)
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        cls_pos = self.cls_pos.expand(B, -1, -1)
 
         pos = self.pos_embed(center)
-        sos_pos = self.sos_pos.expand(group_input_tokens.size(0), -1, -1)
+        sos_pos = self.sos_pos.expand(B, -1, -1)
         pos = torch.cat([sos_pos, pos], dim=1)
 
         relative_position = center[:, 1:, :] - center[:, :-1, :]
@@ -721,14 +754,20 @@ class PointTransformer(nn.Module):
         x = torch.cat((cls_tokens, group_input_tokens), dim=1)
         pos = torch.cat((cls_pos, pos), dim=1)
 
+        # casual mask and key_padding mask for GPT-extractor
         attn_mask = torch.full(
             (L+2, L+2), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
         ).to(torch.bool)
         attn_mask = torch.triu(attn_mask, diagonal=1)
         key_padding_mask = None
         if self.is_tracklet:
-            key_padding_mask = torch.arange(L+2).expand(B, L+2) >= (padding.unsqueeze(1)+2)
+            # key padding mask
+            key_padding_mask = torch.arange(L+2).expand(B, L+2).cuda() >= (padding.unsqueeze(1)+2)
             key_padding_mask = key_padding_mask.to(torch.bool)
+
+            # modifying pos
+            pos[key_padding_mask] = 0
+
 
         # transformer
         ret, encoded_features, class_feat = self.blocks(x, pos, attn_mask, key_padding_mask, classify=True)
@@ -736,6 +775,7 @@ class PointTransformer(nn.Module):
         encoded_features = torch.cat(
             [encoded_features[:, 0, :].unsqueeze(1), encoded_features[:, 2:-1, :]], dim=1)
 
+        # casual masking and key_padding_mask for GPT-generator
         attn_mask = torch.full(
             (L, L), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
         ).to(torch.bool)
@@ -743,9 +783,13 @@ class PointTransformer(nn.Module):
         key_padding_mask = None
         considered_tokens = torch.full((B, L), True).to(torch.bool)
         if self.is_tracklet:
-            key_padding_mask = torch.arange(L).expand(B, L) >= padding.unsqueeze(1)
+            # key padding mask
+            key_padding_mask = torch.arange(L).expand(B, L).cuda() >= padding.unsqueeze(1)
             key_padding_mask = key_padding_mask.to(torch.bool)
             considered_tokens = ~key_padding_mask
+
+            # modifying pos_relative
+            pos_relative[key_padding_mask] = 0
 
         generated_points = self.generator_blocks(
             encoded_features, pos_relative, attn_mask, key_padding_mask)
@@ -754,6 +798,11 @@ class PointTransformer(nn.Module):
 
         gt_points = neighborhood.reshape(
             B*(self.num_group), self.group_size, 3)
+        
+        # only using considered_tokens for chamfer loss calculation
+        considered_tokens = considered_tokens.reshape(B*self.num_group)
+        gt_points = gt_points[considered_tokens]
+        generated_points = generated_points[considered_tokens]
 
         loss1 = self.loss_func_p1(generated_points, gt_points)
         loss2 = self.loss_func_p2(generated_points, gt_points)
