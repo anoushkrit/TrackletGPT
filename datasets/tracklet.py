@@ -71,6 +71,7 @@ def load_stream(trk_path):
 @DATASETS.register_module()
 class Tracklet(Dataset):
     def __init__(self, config):
+        logger = "Tracklet_Dataset"
         self.config = config
 
         self.data_dir = config.data_dir
@@ -85,8 +86,10 @@ class Tracklet(Dataset):
         self.label_to_int_mapping_path = config.label_to_int_mapping_path
 
         self.patch_size = 12
+        print_log(f"Patch size: {self.patch_size}", logger=logger)
 
         self.label_to_int_mapping = self.load_json(self.label_to_int_mapping_path)
+        print_log(f"Starting to load streamlines...", logger=logger)
         self.load_streamlines_mp()
 
 
@@ -105,7 +108,7 @@ class Tracklet(Dataset):
         streamlines = [] # List of streamlines
         streamline_to_class = {} # Dictionary mapping streamline hash to class name
 
-        if dataset == 'TracktoInferno':
+        if dataset == 'TractoInferno':
             dir_content = Path(os.path.join(data_path, subject, 'tractography')).iterdir()
         elif dataset == '105HCP':
             dir_content = Path(os.path.join(data_path, subject, 'tracts')).iterdir()
@@ -114,7 +117,7 @@ class Tracklet(Dataset):
         dir_content = sorted([p for p in dir_content if p.is_file() and p.suffix == '.trk'])
 
         for clss in dir_content:
-            if dataset == 'TracktoInferno':
+            if dataset == 'TractoInferno':
                 class_name = clss.stem.split('__')[-1]
             elif dataset == '105HCP':
                 class_name = clss.stem
@@ -122,7 +125,7 @@ class Tracklet(Dataset):
             if class_name not in self.label_to_int_mapping.keys():
                 continue
             
-            if dataset == 'TracktoInferno':
+            if dataset == 'TractoInferno':
                 cls_path = os.path.join(data_path, subject, 'tractography', clss)
             elif dataset == '105HCP':
                 cls_path = os.path.join(data_path, subject, 'tracts', clss)
@@ -172,7 +175,6 @@ class Tracklet(Dataset):
             subjects_ = [subject for subject in os.listdir(data_path)
                          if os.path.isdir(os.path.join(data_path, subject))]
             if self.split[i] == 'test' or self.split[i] == 'testset':
-                print(self.test_subjects)
                 subjects_ = [subject for subject in subjects_ if self.test_subjects is None or subject in self.test_subjects]
             subjects.extend(subjects_)
 
@@ -180,7 +182,6 @@ class Tracklet(Dataset):
                              for subject in subjects_]
             subject_data.extend(subject_data_)
         
-        print(subject_data)
         
 
         # Using multiprocessing to parallelize the loading of streamlines
