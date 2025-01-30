@@ -1,14 +1,15 @@
 NAME: Tracklet_QBXFilter
 # data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/dMRI_data/105HCP
-# data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives
-data_dir: /s3/DATA/TractoInferno/derivatives
+data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives
+# data_dir: /s3/DATA/TractoInferno/derivatives
 qbx_save_path: ./data/qbx
-subset: "trainset"
+# subset: "trainset"
 dataset: TractoInferno
+# dataset: 105HCP
 
 sample_per_subject: 10000
 samples_per_class: 1000
-threshold: 10
+threshold: 7
 label_to_int_mapping_path: label_int_mappings/label_int_mapping_TrInF.json
 
 max_num_tokens: 64

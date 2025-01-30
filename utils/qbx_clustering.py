@@ -198,6 +198,7 @@ def create_qbx_cluster_from_scratch_n_save(dataset: str, mapping: dict, save_pat
     for split in splits:
         os.makedirs(f"{save_path}/{split}", exist_ok=True)
         subjects = os.listdir(f'{raw_data_path}/{split}')
+        subjects.reverse()
 
         print_log(f"[QBX CLUSTERING] Creating QBX Clusters for {dataset} dataset", logger="QBX")
         for subject in tqdm(subjects):

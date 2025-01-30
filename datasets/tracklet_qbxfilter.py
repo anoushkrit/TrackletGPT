@@ -48,7 +48,7 @@ def plotting_tracklet(tracklet, file_name="default", title="Tracklet"):
             x=track[0],
             y=track[1],
             z=track[2],
-            mode='markers',
+            mode='lines',
         ))
 
     fig.update_layout(
@@ -73,7 +73,7 @@ def load_stream(trk_path):
 @DATASETS.register_module()
 class Tracklet_QBXFilter(Dataset):
     def __init__(self, config):
-        logger = "Tracklet_Dataset"
+        logger = "Tracklet_QBXFilter_Dataset"
         self.config = config
 
         self.data_dir = config.data_dir
@@ -105,17 +105,18 @@ class Tracklet_QBXFilter(Dataset):
             splits = self.split
 
         for dataset in datasets:
-            if os.path.exists(os.path.join(self.qbx_save_path, dataset)):
-                print_log(f"QBX clusters already exist for dataset {dataset}.", logger=logger)
-                continue
-            print_log(f"Creating QBX clusters for dataset {dataset} and split {splits}", logger=logger)
-            create_qbx_cluster_from_scratch_n_save(
-                dataset=dataset,
-                mapping=self.label_to_int_mapping,
-                raw_data_path=self.data_dir,
-                save_path=os.path.join(self.qbx_save_path, dataset),
-                subset = splits
-            )
+            for split in splits:
+                if os.path.exists(os.path.join(self.qbx_save_path, dataset, split)):
+                    print_log(f"QBX clusters already exist for dataset {dataset} and split {split}", logger=logger)
+                    continue
+                print_log(f"Creating QBX clusters for dataset {dataset} and split {split}", logger=logger)
+                create_qbx_cluster_from_scratch_n_save(
+                    dataset=dataset,
+                    mapping=self.label_to_int_mapping,
+                    raw_data_path=self.data_dir,
+                    save_path=os.path.join(self.qbx_save_path, dataset),
+                    subset = [split]
+                )
         
         print_log(f"Starting to load streamlines...", logger=logger)
         self.load_streamlines_mp()
@@ -136,50 +137,6 @@ class Tracklet_QBXFilter(Dataset):
     
     def hash_streamline(self, streamline):
         return sha256(streamline.tobytes()).hexdigest()
-    
-    def load_subject(self,subject_data):
-        """ Helper function to load streamlines of all classes for a particular subject. """
-        subject, data_path, dataset, sample_per_subject, samples_per_class = subject_data
-        subject_id = subject
-        streamlines = [] # List of streamlines
-        streamline_to_class = {} # Dictionary mapping streamline hash to class name
-
-        if dataset == 'TractoInferno':
-            dir_content = Path(os.path.join(data_path, subject, 'tractography')).iterdir()
-        elif dataset == '105HCP':
-            dir_content = Path(os.path.join(data_path, subject, 'tracts')).iterdir()
-        else:
-            raise NotImplementedError(f"Dataset {dataset} not implemented.")
-        dir_content = sorted([p for p in dir_content if p.is_file() and p.suffix == '.trk'])
-
-        for clss in dir_content:
-            if dataset == 'TractoInferno':
-                class_name = clss.stem.split('__')[-1]
-            elif dataset == '105HCP':
-                class_name = clss.stem
-            
-            if class_name not in self.label_to_int_mapping.keys():
-                continue
-            
-            if dataset == 'TractoInferno':
-                cls_path = os.path.join(data_path, subject, 'tractography', clss)
-            elif dataset == '105HCP':
-                cls_path = os.path.join(data_path, subject, 'tracts', clss)
-            loaded_streamlines = load_stream(cls_path)
-
-            # Optionally downsample if needed
-            if len(loaded_streamlines) > samples_per_class:
-                loaded_streamlines = [loaded_streamlines[i] for i in np.random.choice(len(loaded_streamlines), samples_per_class, replace=False)]
-            
-            streamlines.extend(loaded_streamlines)
-            streamline_to_class.update({self.hash_streamline(streamline): class_name for streamline in loaded_streamlines})
-
-        if len(streamlines) > sample_per_subject:
-            # streamlines = select_random_set_of_streamlines(streamlines, sample_per_subject)
-            streamlines = [streamlines[i] for i in np.random.choice(len(streamlines), sample_per_subject, replace=False)]
-
-        labels = [streamline_to_class[self.hash_streamline(streamline)] for streamline in streamlines]
-        return subject_id, streamlines, labels
     
     def load_subject_with_qbx_filter(self, subject_data):
         """
@@ -233,11 +190,9 @@ class Tracklet_QBXFilter(Dataset):
             filtered_streamlines = [filtered_streamlines[i] for i in random_indices]
             filtered_labels = [filtered_labels[i] for i in random_indices]
 
-
         return subject_id, filtered_streamlines, filtered_labels
 
     def load_streamlines_mp(self):
-        
         """ 
             Load streamlines from the dataset. 
             This function is parallelized using multiprocessing. 
@@ -369,6 +324,24 @@ class Tracklet_QBXFilter(Dataset):
 # yaml_file = "cfgs/dataset_configs/tracklet_qbxfilter.yaml"
 # config = cfg_from_yaml_file(yaml_file)
 # dataset = Tracklet_QBXFilter(config)
+
+# label_to_idx_mapp = defaultdict(list)
+# for i in range(len(dataset)):
+#     label = dataset.labels[i]
+#     label_to_idx_mapp[label].append(i)
+# for label in label_to_idx_mapp:
+#     print(f"Label: {label}, Number of samples: {len(label_to_idx_mapp[label])}")
+# label_to_idx_mapp = defaultdict(list)
+# for i in range(10000):
+#     idx = np.random.randint(len(dataset))
+#     label = dataset.labels[idx]
+#     label_to_idx_mapp[label].append(idx)
+
+# for label in label_to_idx_mapp:
+#     print(f"Label: {label}, Number of samples: {len(label_to_idx_mapp[label])}")
+#     streamlines = [dataset.streamlines[idx] for idx in label_to_idx_mapp[label]]
+#     plotting_tracklet(streamlines, file_name=f"streamline_plots/tracklet_{label}", title=f"Label: {label}")
+
 # tracklet, tracklet_center, padding = dataset[100]
 # x = tracklet_center[:,None,:][:padding]
 # print(tracklet.shape)
