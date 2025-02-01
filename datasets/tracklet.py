@@ -175,7 +175,9 @@ class Tracklet(Dataset):
             subjects_ = [subject for subject in os.listdir(data_path)
                          if os.path.isdir(os.path.join(data_path, subject))]
             if self.split[i] == 'test' or self.split[i] == 'testset':
+                print(self.test_subjects)
                 subjects_ = [subject for subject in subjects_ if self.test_subjects is None or subject in self.test_subjects]
+                print(subjects_)
             subjects.extend(subjects_)
 
             subject_data_ = [(subject, data_path, datasets[i], self.sample_per_subject, self.samples_per_class)
@@ -265,9 +267,14 @@ class Tracklet(Dataset):
         tracklet_center = np.median(tracklet, axis=1)
         tracklet = tracklet - tracklet_center[:, None, :]
 
-        # plotting_tracklet(tracklet, file_name="tracklet")
-        # plotting_tracklet(tracklet_center[:,None,:], file_name="tracklet_center")
-        return np.float32(label),0,(torch.from_numpy(tracklet).float(), torch.from_numpy(tracklet_center).float(), np.float32(padding))
+
+        if self.split[0] == 'test' or self.split[0] == 'testset':
+            return np.float32(label),[str(self.subject_ids[index]), str(self.streamlines[index])],(torch.from_numpy(tracklet).float(),
+                                                                                              torch.from_numpy(tracklet_center).float(),
+                                                                                              np.float32(padding))
+        return np.float32(label),0,(torch.from_numpy(tracklet).float(),
+                                    torch.from_numpy(tracklet_center).float(),
+                                    np.float32(padding))
     def __len__(self):
         return len(self.streamlines)
 

@@ -459,11 +459,11 @@ def test(base_model, test_dataloader, args, config, logger=None):
     base_model.eval()  # set model to eval mode
     dataset_name = config.dataset.test._base_.NAME
 
-    if 'single_streamline' in dataset_name or "goback_3L" in dataset_name or dataset_name == 'single_streamline':
-        raw_streamlines = [] # only required for single_streamline_TrInF
-        subjects = []
-    if "qbx_goback_3L" in dataset_name:
-        streamline_label = []
+    # if 'single_streamline' in dataset_name or "goback_3L" in dataset_name or dataset_name == 'single_streamline':
+    raw_streamlines = []
+    subjects = []
+    # if "qbx_goback_3L" in dataset_name:
+    #     streamline_label = []
     test_pred = []
     test_label = []
     npoints = config.npoints
@@ -474,9 +474,6 @@ def test(base_model, test_dataloader, args, config, logger=None):
             if config.total_bs > 1:
                 points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
                 label = taxonomy_ids.cuda()
-            elif 'single_streamline' in dataset_name or 'goback_3L' in dataset_name:
-                points = data.squeeze().cuda()
-                label = taxonomy_ids.squeeze().cuda()
             else:
                 points = data.cuda()
                 label = taxonomy_ids.cuda()
@@ -488,22 +485,22 @@ def test(base_model, test_dataloader, args, config, logger=None):
 
             pred = logits.argmax(-1).view(-1)
 
-            if 'single_streamline' in dataset_name or 'goback_3L_streamline' in dataset_name:
-                raw_streamlines.append(list(extra_info[1]))
-                subjects.append(list(extra_info[0]))
-            if 'qbx_goback_3L' in dataset_name:
-                subjects.append(list(extra_info[0]))
-                streamline_label.append(list(extra_info[1]))
-                raw_streamlines.append(list(extra_info[2]))
+
+            raw_streamlines.append(list(extra_info[1]))
+            subjects.append(list(extra_info[0]))
+            # if 'qbx_goback_3L' in dataset_name:
+            #     subjects.append(list(extra_info[0]))
+            #     streamline_label.append(list(extra_info[1]))
+            #     raw_streamlines.append(list(extra_info[2]))
             test_pred.append(pred.detach())
             test_label.append(target.detach())
 
 
         test_pred = torch.cat(test_pred, dim=0)
         test_label = torch.cat(test_label, dim=0)
-        if 'goback_3L' in dataset_name or 'single_streamline' in dataset_name:
-            raw_streamlines = [item for sublist in raw_streamlines for item in sublist]
-            subjects = [item for sublist in subjects for item in sublist]
+        # if 'goback_3L' in dataset_name or 'single_streamline' in dataset_name:
+        raw_streamlines = [item for sublist in raw_streamlines for item in sublist]
+        subjects = [item for sublist in subjects for item in sublist]
         if 'qbx_goback_3L' in dataset_name:
             streamline_label = [item for sublist in streamline_label for item in sublist]
 
@@ -519,18 +516,12 @@ def test(base_model, test_dataloader, args, config, logger=None):
             torch.cuda.synchronize()
 
 
+        # saving raw streamlines, with true and pred labels for dice score calculation
         model = args.config.split('/')[-2] # PointGPT-M or PointGPT-S
-        pkl_path = f'predictions_new/{args.exp_name}/{dataset_name}/pkls/test_pred__{model}.pkl'
+        pkl_path = f'predictions_new/{args.exp_subset}/{args.exp_name}/{dataset_name}/pkls/test_pred__{model}.pkl'
         os.makedirs(os.path.dirname(pkl_path), exist_ok=True)
-        if 'streamline' in dataset_name:
-            with open(pkl_path, 'wb') as f:
-                pickle.dump((test_label.cpu().numpy(), test_pred.cpu().numpy(), raw_streamlines, subjects), f)
-        elif 'qbx_goback_3L' in dataset_name:
-            with open(pkl_path, 'wb') as f:
-                pickle.dump((test_label.cpu().numpy(), test_pred.cpu().numpy(), subjects, streamline_label, raw_streamlines), f)
-        else:
-            with open(pkl_path, 'wb') as f:
-                pickle.dump((test_label.cpu().numpy(), test_pred.cpu().numpy()), f)
+        with open(pkl_path, 'wb') as f:
+            pickle.dump((test_label.cpu().numpy(), test_pred.cpu().numpy(), raw_streamlines, subjects), f)
 
 
 import plotly.graph_objects as go

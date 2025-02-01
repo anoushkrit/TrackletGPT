@@ -32,6 +32,8 @@ def load_pickle_data(path):
     
 #     return streamline
 def string_to_list(streamline):
+    if isinstance(streamline, list):
+        streamline = streamline[0]
     list_str = ','.join(streamline.split())
     clean_list_str = list_str.replace('[,', '[').replace(',]', ']')
     clean_list_str = clean_list_str.replace(', dtype=float32)', '').replace('array([', '[')
@@ -91,39 +93,39 @@ def calculate_hcp_scores_subject(args):
 def calculate_hcp_scores(pickle_path, mapping_path, output_path, dataset_name):
 
     # laoding pickle data
-    if 'streamline' in dataset_name:
-        true_labels, predicted_labels, streamlines, subjects = load_pickle_data(pickle_path)
-    elif 'qbx_goback_3L' in dataset_name:
-        true_cluster_labels, predicted_cluster_labels, cluster_subjects, streamline_cluster_label, raw_streamlines_cluster = load_pickle_data(pickle_path)
-    else:
-        raise ValueError('Dataset name not recognized')
+    # if 'streamline' in dataset_name:
+    true_labels, predicted_labels, streamlines, subjects = load_pickle_data(pickle_path)
+    # elif 'qbx_goback_3L' in dataset_name:
+    #     true_cluster_labels, predicted_cluster_labels, cluster_subjects, streamline_cluster_label, raw_streamlines_cluster = load_pickle_data(pickle_path)
+    # else:
+    #     raise ValueError('Dataset name not recognized')
     print('----- pickle data loaded -----')
 
     # converting string to list
-    if 'streamline' in dataset_name:
-        subjects = np.array(subjects)
-        unique_subjects = np.unique(subjects)
-        with Pool() as p:
-            streamlines = p.map(string_to_list, streamlines)
-    elif 'qbx_goback_3L' in dataset_name:
-        with Pool() as p:
-            cluster_subjects = p.map(string_to_list, cluster_subjects)
-        with Pool() as p:
-            streamline_cluster_label = p.map(string_to_list, streamline_cluster_label)
-        with Pool() as p:
-            raw_streamlines_cluster = p.map(string_to_list, raw_streamlines_cluster)
-        streamlines = []
-        predicted_labels = []
-        true_labels = []
-        subjects = []
-        for i in range(len(cluster_subjects)):
-            for j in range(len(cluster_subjects[i])):
-                streamlines.append(raw_streamlines_cluster[i][j])
-                predicted_labels.append(predicted_cluster_labels[i])
-                true_labels.append(streamline_cluster_label[i][j])
-                subjects.append(cluster_subjects[i][j])
-        subjects = np.array(subjects)
-        unique_subjects = np.unique(subjects)
+    subjects = np.array(subjects)
+    unique_subjects = np.unique(subjects)
+
+    with Pool() as p:
+        streamlines = p.map(string_to_list, streamlines)
+    # elif 'qbx_goback_3L' in dataset_name:
+    #     with Pool() as p:
+    #         cluster_subjects = p.map(string_to_list, cluster_subjects)
+    #     with Pool() as p:
+    #         streamline_cluster_label = p.map(string_to_list, streamline_cluster_label)
+    #     with Pool() as p:
+    #         raw_streamlines_cluster = p.map(string_to_list, raw_streamlines_cluster)
+    #     streamlines = []
+    #     predicted_labels = []
+    #     true_labels = []
+    #     subjects = []
+    #     for i in range(len(cluster_subjects)):
+    #         for j in range(len(cluster_subjects[i])):
+    #             streamlines.append(raw_streamlines_cluster[i][j])
+    #             predicted_labels.append(predicted_cluster_labels[i])
+    #             true_labels.append(streamline_cluster_label[i][j])
+    #             subjects.append(cluster_subjects[i][j])
+    #     subjects = np.array(subjects)
+    #     unique_subjects = np.unique(subjects)
     print('----- string to list done -----')
 
     # calculating accuracy
@@ -136,7 +138,8 @@ def calculate_hcp_scores(pickle_path, mapping_path, output_path, dataset_name):
     # getting label mapping
     int_label_mapping = get_label_mapping(mapping_path)
     
-    inp = [] # creating input to pass to the function while multiprocessing
+    # creating input to pass to the function while multiprocessing
+    inp = [] 
     pickle_path = os.path.dirname(output_path)+'/true_pred_labels/'
     for sub in unique_subjects:
         subject_streamlines = [s for s,t in zip(streamlines, subjects) if t == sub]
@@ -153,7 +156,7 @@ def calculate_hcp_scores(pickle_path, mapping_path, output_path, dataset_name):
             
     for i in tqdm(range(len(inp))):
         output[unique_subjects[i]] = calculate_hcp_scores_subject(inp[i])
-        output[unique_subjects[i]][0] = eq/len(true_labels)*100
+        output[unique_subjects[i]][0] = {'acc': eq/len(true_labels)*100, 'support': len(true_labels)}
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w') as f:
         json.dump(output, f, indent=4)
@@ -186,6 +189,7 @@ if __name__ == '__main__':
     # Add arguments
     parser.add_argument("--model", required=True, help="Name of the model to use.")
     parser.add_argument("--exp_name", required=True, help="Experiment name.")
+    parser.add_argument("--exp_subset", required=True, help="Experiment subset.")
     parser.add_argument("--dataset_name", required=True, help="Name of the dataset.")
     parser.add_argument("--mapping_path", required=True, help="Path to the label int mapping file.")
     
@@ -193,8 +197,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # print(args.model, args.exp_name, args.dataset_name, args.mapping_path)
-    pickle_path = f'predictions_new/test_{args.exp_name}/{args.dataset_name}/pkls/test_pred__{args.model}.pkl'
-    output_path = f'predictions_new/test_{args.exp_name}/{args.dataset_name}/results/test_pred__{args.model}.json'
+    pickle_path = f'predictions_new/{args.exp_subset}/test_{args.exp_name}/{args.dataset_name}/pkls/test_pred__{args.model}.pkl'
+    output_path = f'predictions_new/{args.exp_subset}/test_{args.exp_name}/{args.dataset_name}/results/test_pred__{args.model}.json'
     json_dice = calculate_hcp_scores(pickle_path, args.mapping_path, output_path, args.dataset_name)
     # with open (output_path, 'r') as f:
     #     json_dice = json.load(f)

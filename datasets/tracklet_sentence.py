@@ -2,6 +2,7 @@
 import sys
 import os
 import json
+import time
 import datetime
 import gc
 import pickle
@@ -21,7 +22,7 @@ from dipy.io.streamline import load_tractogram
 from torch.utils.data import Dataset
 
 # Project-specific imports
-# from .build import DATASETS
+from .build import DATASETS
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.logger import *
 from utils.config import cfg_from_yaml_file
@@ -42,13 +43,21 @@ def plotting_tracklet(tracklet, file_name="default", title="Tracklet"):
     
     fig = go.Figure()
     # print(tracklet.shape)
-    for track in tracklet:
+    for i, track in enumerate(tracklet):
         track = list(zip(*track))  # Transpose to get x, y, z components
+        # if i == 0:
+        #     fig.add_trace(go.Scatter3d(
+        #         x=track[0],
+        #         y=track[1],
+        #         z=track[2],
+        #         mode='markers',
+        #     ))
+        #     continue
         fig.add_trace(go.Scatter3d(
             x=track[0],
             y=track[1],
             z=track[2],
-            mode='lines',
+            mode='markers',
         ))
 
     fig.update_layout(
@@ -70,10 +79,10 @@ def load_stream(trk_path):
     bundle_track = load_tractogram(str(trk_path), 'same', bbox_valid_check=False)
     return list(bundle_track.streamlines)
 
-# @DATASETS.register_module()
-class Tracklet_Sentense(Dataset):
+@DATASETS.register_module()
+class Tracklet_Sentence(Dataset):
     def __init__(self, config):
-        logger = "Tracklet_Sentense_Dataset"
+        logger = "Tracklet_Sentence_Dataset"
         self.config = config
 
         self.data_dir = config.data_dir
@@ -84,15 +93,21 @@ class Tracklet_Sentense(Dataset):
         self.samples_per_subject = config.sample_per_subject
         self.samples_per_class = config.samples_per_class
         self.threshold = config.threshold
+        self.considered_neighbours_count = config.considered_neighbours_count
         self.test_subjects = config.get('test_subjects', None)
 
         self.max_num_tokens = config.max_num_tokens
+        self.EOS_token = config.EOS_token
         self.label_to_int_mapping_path = config.label_to_int_mapping_path
 
         self.patch_size = 12
-        self.neighbouring_streamline_count = 12
+        self.neighbouring_streamline_count = config.max_total_neighbours_count
         print_log(f"Patch size: {self.patch_size}", logger=logger)
 
+        # Check if the threshold is greater than the considered neighbours count
+        if self.threshold < self.considered_neighbours_count:
+            raise ValueError("Threshold should be greater than the considered neighbours count.")
+        
         self.label_to_int_mapping = self.load_json(self.label_to_int_mapping_path)
 
         if isinstance(self.dataset, str):
@@ -149,6 +164,7 @@ class Tracklet_Sentense(Dataset):
         subject_id, qbx_pkl_path, threshold, samples_per_subject, samples_per_class, neighbouring_streamline_count = subject_data
         clusters_L1_L2_L3, streamlines, labels = self.load_pickle(qbx_pkl_path)
         clusters_L3 = np.array(clusters_L1_L2_L3)[:, 2]
+        del clusters_L1_L2_L3
 
         # initialize the cluster_id_to_idxs_mapping
         cluster_id_to_idxs_mapping = {
@@ -176,6 +192,7 @@ class Tracklet_Sentense(Dataset):
             if len(idxs) >= samples_per_class:
                 idxs = np.random.choice(idxs, samples_per_class, replace=False)
             considered_streamline_idxs.extend(idxs)
+        del label_to_streamline_idxs
         
         # randomly sample samples_per_subject streamlines for the subject
         if len(considered_streamline_idxs) >= samples_per_subject:
@@ -264,6 +281,9 @@ class Tracklet_Sentense(Dataset):
         if len(tracklet) < self.max_num_tokens:
             padding = self.max_num_tokens - len(tracklet)
             tracklet = np.concatenate((tracklet, np.zeros((padding, self.patch_size, 3))), axis=0)
+        else:
+            print('problem')
+        #     mod_tracklet = np.array(tracklet[:self.max_num_tokens])
         return tracklet
     
     def pad_with_noise(self, tracklet):
@@ -303,58 +323,118 @@ class Tracklet_Sentense(Dataset):
         return pc
     
     def __getitem__(self, index):
-        """ returns tracklet of a single streamline with necessary padding
-            and corresponding label """
+        """
+            Returns:
+                group of streamlines
+                label of main streamline
+                padding (number of tokens to consider)
+                index where EOS/[SEP] should be placed
+        """
+
         streamline = self.streamlines[index]
         label = self.labels[index]
-        label = self.label_to_int_mapping[label]
+        label = self.label_to_int_mapping[label] # converting label to integer
+        neighbour_streamlines = self.streamline_neighbours[index]
 
-        # getting tracklet from streamline
+        # randomly sample neighbouring streamlines
+        if len(neighbour_streamlines) > self.considered_neighbours_count:
+            neighbour_streamlines = [
+                neighbour_streamlines[i] for i in np.random.choice(len(neighbour_streamlines), self.considered_neighbours_count, replace=False)
+            ]
+        # grouping main streamline with neighbours to do normalization of PC
+        grouped_streamlines = [streamline] + neighbour_streamlines
+        grouped_streamlines = [np.array(streamline) for streamline in grouped_streamlines]
+        grouped_streamlines = np.concatenate(grouped_streamlines, axis=0)
+        grouped_streamlines = self.pc_norm(grouped_streamlines)
+
+        # getting back streamline and neighbouring streamlines
+        streamline = grouped_streamlines[:len(streamline)]
+        counted_pts = len(streamline)
+        for i in range(len(neighbour_streamlines)):
+            neighbour_streamlines[i] = grouped_streamlines[
+                counted_pts: counted_pts + len(neighbour_streamlines[i])
+            ]
+            counted_pts += len(neighbour_streamlines[i])
+        
+        # getting the tracklet
         streamline = interpolate_streamline((streamline, 64))
-        streamline = self.pc_norm(streamline)
-        tracklet = get_tracklet_from_streamline(streamline, apt_param=.4)
+        tracklet = get_tracklet_from_streamline(streamline, apt_param=0.4)
         tracklet = np.array([interpolate_streamline((tracklet[i], self.patch_size)) for i in range(len(tracklet))])
 
-        # zero padding
-        padding = len(tracklet)
-        tracklet = self.zero_padding(tracklet)
-        # tracklet = self.repeat_last_padding(tracklet)
-        # tracklet = self.repeat_all_padding(tracklet)
-        # tracklet = self.pad_with_noise(tracklet)
+        neighbour_streamlines = [interpolate_streamline((neighbour_streamline, 64))
+                                 for neighbour_streamline in neighbour_streamlines]
+        neighbour_tracklets = [get_tracklet_from_streamline(neighbour_streamline, apt_param=0.4)
+                                for neighbour_streamline in neighbour_streamlines]
+        neighbour_tracklets = [
+            np.array([interpolate_streamline((neighbour_tracklet[i], self.patch_size)) for i in range(len(neighbour_tracklet))])
+            for neighbour_tracklet in neighbour_tracklets
+        ]
+        
+        # initializing the sentence
+        EOS_idxs = np.zeros(len(neighbour_tracklets), dtype=np.int32)
+        sentence_len = len(tracklet)
+        for i in range(len(neighbour_tracklets)):
+            sentence_len += len(neighbour_tracklets[i])
+            if self.EOS_token: sentence_len += 1
+        sentence = np.zeros((sentence_len, self.patch_size, 3))
 
-        # normalizing tracklet with respect to the center points
-        tracklet_center = np.median(tracklet, axis=1)
-        tracklet = tracklet - tracklet_center[:, None, :]
+        # adding the main tracklet
+        sentence[:len(tracklet)] = tracklet.copy()
+        EOS_idxs[0] = len(tracklet)-1
+        if self.EOS_token:
+            sentence[len(tracklet)] = np.zeros((self.patch_size, 3))
+            EOS_idxs[0] = len(tracklet)
 
-        # plotting_tracklet(tracklet, file_name="tracklet")
-        # plotting_tracklet(tracklet_center[:,None,:], file_name="tracklet_center")
-        return np.float32(label),0,(torch.from_numpy(tracklet).float(), torch.from_numpy(tracklet_center).float(), np.float32(padding))
+        # adding the neighbouring tracklets
+        for i in range(len(neighbour_tracklets)):
+            sentence[1+EOS_idxs[i]:1+EOS_idxs[i]+len(neighbour_tracklets[i])] = neighbour_tracklets[i].copy()
+            if i+1 < len(neighbour_tracklets):
+                if self.EOS_token:
+                    sentence[1+EOS_idxs[i]+len(neighbour_tracklets[i])] = np.zeros((self.patch_size, 3))
+                    EOS_idxs[i+1] = 1 + EOS_idxs[i] + len(neighbour_tracklets[i])
+                else:
+                    EOS_idxs[i+1] = EOS_idxs[i] + len(neighbour_tracklets[i])
+        
+        for i in range(len(sentence)-1):
+            if np.all(sentence[i]==0) or np.all(sentence[i+1]==0):
+                print('zero')
+            if np.all(sentence[i]==sentence[i+1]):
+                print('same')
+
+        # padding the sentence
+        padding = len(sentence)
+        sentence = self.zero_padding(sentence)
+
+        # getting centroids of the sentence and normalizaing them
+        sentence_centroids = np.median(sentence, axis=1)
+        sentence = sentence - sentence_centroids[:, None, :]
+
+        data = {
+            'tokens': torch.from_numpy(sentence).float(),
+            'center': torch.from_numpy(sentence_centroids).float(),
+            'padding': np.float32(padding),
+            'EOS_idxs': torch.tensor(EOS_idxs).float()
+        }
+        if self.split[0] == 'test' or self.split[0] == 'testset':
+            return np.float32(label),[str(self.subject_ids[index]), str(self.streamlines[index])], data
+        return np.float32(label), 0, data
+        
+
     def __len__(self):
         return len(self.streamlines)
 
-yaml_file = "cfgs/dataset_configs/tracklet_qbxfilter.yaml"
-config = cfg_from_yaml_file(yaml_file)
-dataset = Tracklet_Sentense(config)
-
-# label_to_idx_mapp = defaultdict(list)
-# for i in range(len(dataset)):
-#     label = dataset.labels[i]
-#     label_to_idx_mapp[label].append(i)
-# for label in label_to_idx_mapp:
-#     print(f"Label: {label}, Number of samples: {len(label_to_idx_mapp[label])}")
-# label_to_idx_mapp = defaultdict(list)
-# for i in range(10000):
+# yaml_file = "cfgs/dataset_configs/tracklet_qbxfilter.yaml"
+# config = cfg_from_yaml_file(yaml_file)
+# dataset = Tracklet_Sentence(config)
+# time.sleep(100)
+# for i in range(20):
 #     idx = np.random.randint(len(dataset))
-#     label = dataset.labels[idx]
-#     label_to_idx_mapp[label].append(idx)
+#     label, _, (sentence, sentence_centroids, padding, SEP_idxs) = dataset[idx]
 
-# for label in label_to_idx_mapp:
-#     print(f"Label: {label}, Number of samples: {len(label_to_idx_mapp[label])}")
-#     streamlines = [dataset.streamlines[idx] for idx in label_to_idx_mapp[label]]
-#     plotting_tracklet(streamlines, file_name=f"streamline_plots/tracklet_{label}", title=f"Label: {label}")
+#     plotting_tracklet(sentence_centroids.unsqueeze(1).numpy(), file_name=f"streamline_plots/{label.item()}", title=f"Label: {label.item()}")
 
-# tracklet, tracklet_center, padding = dataset[100]
-# x = tracklet_center[:,None,:][:padding]
-# print(tracklet.shape)
-# print(x.shape)
-# plotting_tracklet(x)
+# max_length = 0
+# for i in range(10000):
+#     label, _, (sentence, sentence_centroids, padding, SEP_idxs) = dataset[i]
+#     max_length = max(max_length, len(sentence))
+# print(max_length)

@@ -330,6 +330,7 @@ class GPT_Transformer(nn.Module):
         self.encoder_dims = config.transformer_config.encoder_dims
 
         self.is_tracklet = config.is_tracklet
+        self.is_tracklet_sentence = config.get('is_tracklet_sentence', False)
 
         assert self.encoder_dims in [256, 384, 768, 1024]
         if self.encoder_dims == 384 or self.encoder_dims == 256:
@@ -384,9 +385,11 @@ class GPT_Transformer(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, neighborhood, center, padding=None, noaug=False, classify=False):
+    def forward(self, neighborhood, center, padding=None, EOS_idxs=None, noaug=False, classify=False):
+        # error handling
         if self.is_tracklet and padding is None:
             raise ValueError('padding is None in tracklet mode')
+        
         # generate mask
         group_input_tokens = self.encoder(neighborhood)  # B G C
         batch_size, seq_len, C = group_input_tokens.size()
@@ -456,6 +459,7 @@ class GPT_Transformer(nn.Module):
             print('nan in group_input_tokens', torch.isnan(group_input_tokens).any())
             print('nan in pos_absolute', torch.isnan(pos_absolute).any())
             print('nan in pos_relative', torch.isnan(pos_relative).any())
+            print(len(torch.isnan(pos_relative).nonzero()))
         # transformer
         if classify == False:
             encoded_features = self.blocks(
@@ -486,6 +490,7 @@ class TractoGPT(nn.Module):
         self.weight_center = config.weight_center
 
         self.is_tracklet = config.is_tracklet
+        self.is_tracklet_sentence = config.get('is_tracklet_sentence', False)
         print_log(
             f'[TractoGPT] divide point cloud into G{self.num_group} x S{self.group_size} points ...', logger='TractoGPT')
         self.group_divider = Group(
@@ -508,11 +513,17 @@ class TractoGPT(nn.Module):
         self.loss_func_c = nn.MSELoss().cuda()
 
     def forward(self, pts, vis=False, **kwargs):
-        if self.is_tracklet:
-            neighborhood, center, padding = pts
+        if self.is_tracklet_sentence:
+            neighborhood, center, padding, EOS_idxs = pts
+        elif self.is_tracklet:
+            neighborhood = pts['tokens']
+            center = pts['center']
+            padding = pts['padding']
+            # neighborhood, center, padding = pts
+            EOS_idxs = None
         else:
             neighborhood, center = self.group_divider(pts)
-            padding = None
+            padding = EOS_idxs = None
 
         # print('nan in neighborhood', torch.isnan(neighborhood).any())
         # print('nan in center', torch.isnan(center).any())
@@ -521,7 +532,7 @@ class TractoGPT(nn.Module):
         B = neighborhood.shape[0]
 
         generated_points, considered_tokens = self.GPT_Transformer(
-            neighborhood, center, padding)
+            neighborhood, center, padding, EOS_idxs)
 
         gt_points = neighborhood.reshape(
             B*(self.num_group), self.group_size, 3)

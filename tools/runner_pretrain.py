@@ -127,14 +127,13 @@ def run_net(args, config, train_writer=None, val_writer=None):
             # npoints = config.dataset.train.others.npoints
             dataset_name = config.dataset.train._base_.NAME
 
-            if config.total_bs > 1:
-                # points = data.cuda()
-                points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
-            elif 'single_streamline' in dataset_name or 'goback_3L' in dataset_name:
-                points = data.squeeze().cuda()
+            if dataset_name == 'Tracklet_Sentence':
+                for keys in data.keys():
+                    data[keys] = data[keys].cuda()
+                points = data
             else:
-                raise NotImplementedError(
-                    f'Train phase do not support {dataset_name}')
+                points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
+            
 
             # assert points.size(1) == npoints
             # points = train_transforms(points)

@@ -145,7 +145,7 @@ class Tracklet_QBXFilter(Dataset):
             This will remove the streamlines which belong to cluster not obeying the threshold.
         """
 
-        subject_id, qbx_pkl_path, threshold, samples_per_subject, samples_per_class = subject_data
+        subject_id, qbx_pkl_path, threshold, samples_per_subject, samples_per_class, test = subject_data
         clusters_L1_L2_L3, streamlines, labels = self.load_pickle(qbx_pkl_path)
         clusters_L3 = np.array(clusters_L1_L2_L3)[:, 2]
 
@@ -161,7 +161,7 @@ class Tracklet_QBXFilter(Dataset):
         # consider only those streamlines which belong to clusters with more than threshold streamlines
         considered_streamline_idxs = []
         for cluster_id, idxs in cluster_id_to_idxs_mapping['L3'].items():
-            if len(idxs) > threshold:
+            if len(idxs) > threshold or test:
                 considered_streamline_idxs.extend(idxs)
         
         # filter the streamlines and labels
@@ -209,6 +209,7 @@ class Tracklet_QBXFilter(Dataset):
             if isinstance(self.split, list):
                 raise ValueError("Length of 'dataset' and 'split' should be the same.")
             data_paths = [os.path.join(self.qbx_save_path, self.dataset, self.split)]
+            self.split = [self.split]
 
         streamlines = []
         subject_ids = []
@@ -221,6 +222,7 @@ class Tracklet_QBXFilter(Dataset):
                          if os.path.join(data_path, subject).endswith('.pkl')]
             if self.split[i] == 'test' or self.split[i] == 'testset':
                 subjects_ = [subject for subject in subjects_ if self.test_subjects is None or subject in self.test_subjects]
+                print(subjects_)
             subjects.extend(subjects_)
 
             # subject_data_ = [(subject, data_path, datasets[i], self.samples_per_subject, self.samples_per_class)
@@ -229,7 +231,8 @@ class Tracklet_QBXFilter(Dataset):
                               os.path.join(data_path, f"{subject}.pkl"), 
                               self.threshold, 
                               self.samples_per_subject, 
-                              self.samples_per_class)
+                              self.samples_per_class,
+                              self.split[i] == 'test' or self.split[i] == 'testset')
                              for subject in subjects_]
             subject_data.extend(subject_data_)
         
@@ -315,9 +318,13 @@ class Tracklet_QBXFilter(Dataset):
         tracklet_center = np.median(tracklet, axis=1)
         tracklet = tracklet - tracklet_center[:, None, :]
 
-        # plotting_tracklet(tracklet, file_name="tracklet")
-        # plotting_tracklet(tracklet_center[:,None,:], file_name="tracklet_center")
-        return np.float32(label),0,(torch.from_numpy(tracklet).float(), torch.from_numpy(tracklet_center).float(), np.float32(padding))
+        if self.split[0] == 'test' or self.split[0] == 'testset':
+            return np.float32(label),[str(self.subject_ids[index]), str(self.streamlines[index])],(torch.from_numpy(tracklet).float(),
+                                                                                              torch.from_numpy(tracklet_center).float(),
+                                                                                              np.float32(padding))
+        return np.float32(label),0,(torch.from_numpy(tracklet).float(),
+                                    torch.from_numpy(tracklet_center).float(),
+                                     np.float32(padding))
     def __len__(self):
         return len(self.streamlines)
 

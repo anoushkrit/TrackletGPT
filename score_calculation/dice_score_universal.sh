@@ -85,20 +85,20 @@ sleep 2
 
 # Define the subject_ids blocks (pairs of subject_ids lines to toggle between)
 subject_blocks=(
-    "subject_ids: ['sub-1175', 'sub-1046', 'sub-1217', '679568']"
-    "subject_ids: ['sub-1047', 'sub-1050', 'sub-1080', '622236']"
-    "subject_ids: ['sub-1146', 'sub-1135', 'sub-1156', '673455']"
-    "subject_ids: ['sub-1164', 'sub-1235', 'sub-1281', '802844']"
-    "subject_ids: ['sub-1245', 'sub-1061', 'sub-1115', '786569']"
-    "subject_ids: ['sub-1209', 'sub-1191', 'sub-1222', '761957']"  
-    "subject_ids: ['sub-1263', 'sub-1049', 'sub-1066', '715647']"  
-    "subject_ids: ['sub-1024', 'sub-1178', 'sub-1019', '930449']"  
-    "subject_ids: ['sub-1124', 'sub-1149', '889579']"
-    "subject_ids: ['sub-1232', 'sub-1006', '599469']"
+    "test_subjects: ['sub-1175', 'sub-1046', 'sub-1217', '679568']"
+    "test_subjects: ['sub-1047', 'sub-1050', 'sub-1080', '622236']"
+    "test_subjects: ['sub-1146', 'sub-1135', 'sub-1156', '673455']"
+    "test_subjects: ['sub-1164', 'sub-1235', 'sub-1281', '802844']"
+    "test_subjects: ['sub-1245', 'sub-1061', 'sub-1115', '786569']"
+    "test_subjects: ['sub-1209', 'sub-1191', 'sub-1222', '761957']"  
+    "test_subjects: ['sub-1263', 'sub-1049', 'sub-1066', '715647']"  
+    "test_subjects: ['sub-1024', 'sub-1178', 'sub-1019', '930449']"  
+    "test_subjects: ['sub-1124', 'sub-1149', '889579']"
+    "test_subjects: ['sub-1232', 'sub-1006', '599469']"
 )
 
-base_model_command="CUDA_VISIBLE_DEVICES=1 python main.py --num_workers 40 --config $config --test --exp_name $exp_name --ckpts $ckpts --exp_subset $exp_subset"
-dice_score_command="python score_calculation/dice_score_universal.py --model $model --dataset_name $dataset_name --exp_name $exp_name --mapping_path $mapping_path"
+base_model_command="CUDA_VISIBLE_DEVICES=0 python main.py --num_workers 40 --config $config --test --exp_name $exp_name --ckpts $ckpts --exp_subset $exp_subset"
+dice_score_command="python score_calculation/dice_score_universal.py --model $model --dataset_name $dataset_name --exp_name $exp_name --exp_subset $exp_subset --mapping_path $mapping_path"
 # Loop through each subject_ids block
 for i in "${!subject_blocks[@]}"
 do
@@ -109,9 +109,7 @@ do
     echo "${subject_blocks[$i]}"
 
     conda deactivate
-    python --version
     conda activate TractoBERT
-    python --version
     eval $base_model_command
     wait
     conda deactivate
