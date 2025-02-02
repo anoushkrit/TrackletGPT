@@ -93,12 +93,7 @@ def calculate_hcp_scores_subject(args):
 def calculate_hcp_scores(pickle_path, mapping_path, output_path, dataset_name):
 
     # laoding pickle data
-    # if 'streamline' in dataset_name:
     true_labels, predicted_labels, streamlines, subjects = load_pickle_data(pickle_path)
-    # elif 'qbx_goback_3L' in dataset_name:
-    #     true_cluster_labels, predicted_cluster_labels, cluster_subjects, streamline_cluster_label, raw_streamlines_cluster = load_pickle_data(pickle_path)
-    # else:
-    #     raise ValueError('Dataset name not recognized')
     print('----- pickle data loaded -----')
 
     # converting string to list
@@ -107,25 +102,6 @@ def calculate_hcp_scores(pickle_path, mapping_path, output_path, dataset_name):
 
     with Pool() as p:
         streamlines = p.map(string_to_list, streamlines)
-    # elif 'qbx_goback_3L' in dataset_name:
-    #     with Pool() as p:
-    #         cluster_subjects = p.map(string_to_list, cluster_subjects)
-    #     with Pool() as p:
-    #         streamline_cluster_label = p.map(string_to_list, streamline_cluster_label)
-    #     with Pool() as p:
-    #         raw_streamlines_cluster = p.map(string_to_list, raw_streamlines_cluster)
-    #     streamlines = []
-    #     predicted_labels = []
-    #     true_labels = []
-    #     subjects = []
-    #     for i in range(len(cluster_subjects)):
-    #         for j in range(len(cluster_subjects[i])):
-    #             streamlines.append(raw_streamlines_cluster[i][j])
-    #             predicted_labels.append(predicted_cluster_labels[i])
-    #             true_labels.append(streamline_cluster_label[i][j])
-    #             subjects.append(cluster_subjects[i][j])
-    #     subjects = np.array(subjects)
-    #     unique_subjects = np.unique(subjects)
     print('----- string to list done -----')
 
     # calculating accuracy
@@ -141,10 +117,15 @@ def calculate_hcp_scores(pickle_path, mapping_path, output_path, dataset_name):
     # creating input to pass to the function while multiprocessing
     inp = [] 
     pickle_path = os.path.dirname(output_path)+'/true_pred_labels/'
+    subject_acc = {}
+    subject_support = {}
     for sub in unique_subjects:
         subject_streamlines = [s for s,t in zip(streamlines, subjects) if t == sub]
         true_labels_subject = [t for t, s in zip(true_labels, subjects) if s == sub]
         predicted_labels_subject = [t for t, s in zip(predicted_labels, subjects) if s == sub]
+        subject_support[sub] = len(true_labels_subject)
+        eq = (np.array(true_labels_subject) == np.array(predicted_labels_subject)).sum()
+        subject_acc[sub] = eq/len(true_labels_subject)*100
         inp.append((sub, true_labels_subject, predicted_labels_subject, subject_streamlines, int_label_mapping, pickle_path))
 
 
@@ -156,7 +137,7 @@ def calculate_hcp_scores(pickle_path, mapping_path, output_path, dataset_name):
             
     for i in tqdm(range(len(inp))):
         output[unique_subjects[i]] = calculate_hcp_scores_subject(inp[i])
-        output[unique_subjects[i]][0] = {'acc': eq/len(true_labels)*100, 'support': len(true_labels)}
+        output[unique_subjects[i]][0] = {'acc': subject_acc[unique_subjects[i]], 'support': subject_support[unique_subjects[i]]}
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w') as f:
         json.dump(output, f, indent=4)

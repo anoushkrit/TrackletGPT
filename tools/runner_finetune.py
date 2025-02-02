@@ -446,6 +446,7 @@ def validate_vote(base_model, test_dataloader, epoch, val_writer, args, config, 
 def test_net(args, config):
     logger = get_logger(args.log_name)
     print_log('Tester start ... ', logger=logger)
+    config.dataset.test._base_.num_workers = args.num_workers
     if config.dataset.test.others.bs == 1:
         config.dataset.test.others.bs = 256
         print_log('Change test batch size to 256 because it was 1', logger=logger)
@@ -534,7 +535,7 @@ def test(base_model, test_dataloader, args, config, logger=None):
 
         # saving raw streamlines, with true and pred labels for dice score calculation
         model = args.config.split('/')[-2] # PointGPT-M or PointGPT-S
-        pkl_path = f'predictions_new/{model}/{args.exp_subset}/{dataset_name}/{args.exp_name}/pkls/test_pred__{model}.pkl'
+        pkl_path = f'predictions_new/{args.exp_subset}/{model}/{dataset_name}/{args.exp_name}/pkls/test_pred__{model}.pkl'
         os.makedirs(os.path.dirname(pkl_path), exist_ok=True)
         with open(pkl_path, 'wb') as f:
             pickle.dump((test_label.cpu().numpy(), test_pred.cpu().numpy(), raw_streamlines, subjects), f)

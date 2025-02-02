@@ -514,7 +514,10 @@ class TractoGPT(nn.Module):
 
     def forward(self, pts, vis=False, **kwargs):
         if self.is_tracklet_sentence:
-            neighborhood, center, padding, EOS_idxs = pts
+            neighborhood = pts['tokens']
+            center = pts['center']
+            padding = pts['padding']
+            EOS_idxs = pts['EOS_idxs']
         elif self.is_tracklet:
             neighborhood = pts['tokens']
             center = pts['center']
@@ -740,7 +743,10 @@ class PointTransformer(nn.Module):
     
     def forward(self, pts):
         if self.is_tracklet:
-            neighborhood, center, padding = pts
+            neighborhood = pts['tokens']
+            center = pts['center']
+            padding = pts['padding']
+            EOS_idxs = None
         else:
             neighborhood, center = self.group_divider(pts)
             padding = None
