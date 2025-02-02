@@ -80,6 +80,7 @@ class Tracklet_QBXFilter(Dataset):
         self.qbx_save_path = config.qbx_save_path
         self.split = config.subset
         self.dataset = config.dataset
+        self.num_workers = config.num_workers
 
         self.samples_per_subject = config.sample_per_subject
         self.samples_per_class = config.samples_per_class
@@ -239,7 +240,7 @@ class Tracklet_QBXFilter(Dataset):
         
 
         # Using multiprocessing to parallelize the loading of streamlines
-        with Pool(processes=os.cpu_count()) as pool:
+        with Pool(processes=self.num_workers) as pool:
             results = list(tqdm(pool.imap(self.load_subject_with_qbx_filter, subject_data), total=len(subject_data), desc='Loading Streamlines'))
 
         for subject_id, subject_streamlines, subject_labels in results:
@@ -318,13 +319,14 @@ class Tracklet_QBXFilter(Dataset):
         tracklet_center = np.median(tracklet, axis=1)
         tracklet = tracklet - tracklet_center[:, None, :]
 
+        data = {
+            'tokens': torch.from_numpy(tracklet).float(),
+            'center': torch.from_numpy(tracklet_center).float(),
+            'padding': np.float32(padding)
+        }
         if self.split[0] == 'test' or self.split[0] == 'testset':
-            return np.float32(label),[str(self.subject_ids[index]), str(self.streamlines[index])],(torch.from_numpy(tracklet).float(),
-                                                                                              torch.from_numpy(tracklet_center).float(),
-                                                                                              np.float32(padding))
-        return np.float32(label),0,(torch.from_numpy(tracklet).float(),
-                                    torch.from_numpy(tracklet_center).float(),
-                                     np.float32(padding))
+            return np.float32(label),[str(self.subject_ids[index]), str(self.streamlines[index])],data
+        return np.float32(label),0,data
     def __len__(self):
         return len(self.streamlines)
 

@@ -58,10 +58,14 @@ class Acc_Metric:
 
 def run_net(args, config, train_writer=None, val_writer=None):
     logger = get_logger(args.log_name)
+
     # build dataset
     config.dataset.val.others.bs = 256
+    config.dataset.train._base_.num_workers = args.num_workers
+    config.dataset.val._base_.num_workers = args.num_workers
     (train_sampler, train_dataloader), (_, test_dataloader), = builder.dataset_builder(args, config.dataset.train), \
         builder.dataset_builder(args, config.dataset.val)
+    
     # build model
     base_model = builder.model_builder(config.model)
 
@@ -128,15 +132,19 @@ def run_net(args, config, train_writer=None, val_writer=None):
             dataset_name = config.dataset.train._base_.NAME
             data_time.update(time.time() - batch_start_time)
             
-            if config.total_bs > 1:
-                points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
-                label = taxonomy_ids.cuda()
-            elif 'goback_3L' in dataset_name or 'single_streamline' in dataset_name:
-                points = data.squeeze().cuda()
-                label = taxonomy_ids.squeeze().cuda()
-            else:
-                points = data[0].cuda()
-                label = data[1].cuda()
+            # if config.total_bs > 1:
+            #     points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
+            #     label = taxonomy_ids.cuda()
+            # elif 'goback_3L' in dataset_name or 'single_streamline' in dataset_name:
+            #     points = data.squeeze().cuda()
+            #     label = taxonomy_ids.squeeze().cuda()
+            # else:
+            #     points = data[0].cuda()
+            #     label = data[1].cuda()
+            for key in data.keys():
+                data[key] = data[key].cuda()
+            points = data
+            label = taxonomy_ids.cuda()
 
             # print(points.shape)
             if npoints == 1024:
@@ -276,26 +284,30 @@ def validate(base_model, test_dataloader, epoch, val_writer, args, config, logge
         for idx, (taxonomy_ids, extra_info, data) in enumerate(test_dataloader):
             dataset_name = config.dataset.train._base_.NAME
             
-            if 1:
-                points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
-                label = taxonomy_ids.cuda()
-            elif dataset_name == 's3FSSknn' or dataset_name == 's3FSSknnLRC' or dataset_name == 's3FSSknnTrInF' or 'single_streamline' in dataset_name or 'goback_3L' in dataset_name:
-                points = data.squeeze().cuda()
-                label = taxonomy_ids.squeeze().cuda()
-            elif dataset_name == 'StreamlinePatchKnn':
-                points = data.cuda()
-                label = taxonomy_ids.cuda()
-            elif dataset_name == 'streamPC':
-                mainS = extra_info.squeeze().cuda()
-                points = data.squeeze().cuda()
-                label = taxonomy_ids.squeeze().cuda()
-            elif dataset_name == 's3FSSknnLRC':
-                points = data.squeeze().cuda()
-                LRC_label = extra_info.squeeze().cuda()
-                label = taxonomy_ids.squeeze().cuda()
-            else:
-                points = data[0].cuda()
-                label = data[1].cuda()
+            # if 1:
+            #     points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
+            #     label = taxonomy_ids.cuda()
+            # elif dataset_name == 's3FSSknn' or dataset_name == 's3FSSknnLRC' or dataset_name == 's3FSSknnTrInF' or 'single_streamline' in dataset_name or 'goback_3L' in dataset_name:
+            #     points = data.squeeze().cuda()
+            #     label = taxonomy_ids.squeeze().cuda()
+            # elif dataset_name == 'StreamlinePatchKnn':
+            #     points = data.cuda()
+            #     label = taxonomy_ids.cuda()
+            # elif dataset_name == 'streamPC':
+            #     mainS = extra_info.squeeze().cuda()
+            #     points = data.squeeze().cuda()
+            #     label = taxonomy_ids.squeeze().cuda()
+            # elif dataset_name == 's3FSSknnLRC':
+            #     points = data.squeeze().cuda()
+            #     LRC_label = extra_info.squeeze().cuda()
+            #     label = taxonomy_ids.squeeze().cuda()
+            # else:
+            #     points = data[0].cuda()
+            #     label = data[1].cuda()
+            for key in data.keys():
+                data[key] = data[key].cuda()
+            points = data
+            label = taxonomy_ids.cuda()
 
             # points = misc.fps(points, npoints)
 
@@ -471,12 +483,16 @@ def test(base_model, test_dataloader, args, config, logger=None):
     with torch.no_grad():
         for idx, (taxonomy_ids, extra_info, data) in enumerate(test_dataloader):
             # print(type(extra_info), type(extra_info[0]), type(extra_info[1]), type(extra_info[0][0]))
-            if config.total_bs > 1:
-                points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
-                label = taxonomy_ids.cuda()
-            else:
-                points = data.cuda()
-                label = taxonomy_ids.cuda()
+            # if config.total_bs > 1:
+            #     points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
+            #     label = taxonomy_ids.cuda()
+            # else:
+            #     points = data.cuda()
+            #     label = taxonomy_ids.cuda()
+            for key in data.keys():
+                data[key] = data[key].cuda()
+            points = data
+            label = taxonomy_ids.cuda()
             # points = misc.fps(points, npoints)
 
             
@@ -518,7 +534,7 @@ def test(base_model, test_dataloader, args, config, logger=None):
 
         # saving raw streamlines, with true and pred labels for dice score calculation
         model = args.config.split('/')[-2] # PointGPT-M or PointGPT-S
-        pkl_path = f'predictions_new/{args.exp_subset}/{args.exp_name}/{dataset_name}/pkls/test_pred__{model}.pkl'
+        pkl_path = f'predictions_new/{model}/{args.exp_subset}/{dataset_name}/{args.exp_name}/pkls/test_pred__{model}.pkl'
         os.makedirs(os.path.dirname(pkl_path), exist_ok=True)
         with open(pkl_path, 'wb') as f:
             pickle.dump((test_label.cpu().numpy(), test_pred.cpu().numpy(), raw_streamlines, subjects), f)

@@ -89,6 +89,7 @@ class Tracklet_Sentence(Dataset):
         self.qbx_save_path = config.qbx_save_path
         self.split = config.subset
         self.dataset = config.dataset
+        self.num_workers = config.num_workers
 
         self.samples_per_subject = config.sample_per_subject
         self.samples_per_class = config.samples_per_class
@@ -262,7 +263,7 @@ class Tracklet_Sentence(Dataset):
         
 
         # Using multiprocessing to parallelize the loading of streamlines
-        with Pool(processes=os.cpu_count()) as pool:
+        with Pool(processes=self.num_workers) as pool:
             results = list(tqdm(pool.imap(self.load_subject_with_qbx_cluster, subject_data), total=len(subject_data), desc='Loading Streamlines'))
 
         for subject_id, subject_streamlines, subject_labels, subject_streamline_neighbours in results:
