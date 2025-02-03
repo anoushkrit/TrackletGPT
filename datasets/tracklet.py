@@ -15,6 +15,7 @@ import plotly.express as px
 # Third-party libraries
 import numpy as np
 import torch
+from torchvision import transforms
 from tqdm import tqdm
 from dipy.io.streamline import load_tractogram
 from torch.utils.data import Dataset
@@ -26,7 +27,12 @@ from utils.logger import *
 from utils.config import cfg_from_yaml_file
 from utils.tracklet_ops import get_tracklet_from_streamline
 from utils.streamline_ops import interpolate_streamline
+from datasets import data_transforms_tracklet
 
+data_transforms = transforms.Compose([
+    data_transforms_tracklet.StreamlineFlip(),
+    data_transforms_tracklet.StreamlineRotate(),
+])
 def plotting_tracklet(tracklet, file_name="default", title="Tracklet"):
     """
     Plots multiple 3D streamlines using Plotly.
@@ -81,6 +87,7 @@ class Tracklet(Dataset):
 
         self.sample_per_subject = config.sample_per_subject
         self.samples_per_class = config.samples_per_class
+        self.data_transformation = config.data_transformation
         self.test_subjects = config.get('test_subjects', None)
 
         self.max_num_tokens = config.max_num_tokens
@@ -251,8 +258,9 @@ class Tracklet(Dataset):
         label = self.labels[index]
         label = self.label_to_int_mapping[label]
 
-        # getting tracklet from streamline
+        # getting tracklet from streamline and randomly transforming it
         streamline = interpolate_streamline((streamline, 64))
+        if self.data_transformation and self.split not in ['test', 'testset']: streamline = data_transforms(streamline)
         streamline = self.pc_norm(streamline)
         tracklet = get_tracklet_from_streamline(streamline, apt_param=.4)
         tracklet = np.array([interpolate_streamline((tracklet[i], self.patch_size)) for i in range(len(tracklet))])
@@ -282,8 +290,12 @@ class Tracklet(Dataset):
 # yaml_file = "cfgs/dataset_configs/tracklet.yaml"
 # config = cfg_from_yaml_file(yaml_file)
 # dataset = Tracklet(config)
-# tracklet, tracklet_center, padding = dataset[100]
-# x = tracklet_center[:,None,:][:padding]
-# print(tracklet.shape)
-# print(x.shape)
-# plotting_tracklet(x)
+# # tracklet, tracklet_center, padding = dataset[100]
+# # x = tracklet_center[:,None,:][:padding]
+# # print(tracklet.shape)
+# # print(x.shape)
+# # plotting_tracklet(x)
+# for i in range(10):
+#     label, _, data = dataset[0]
+#     centers = data['center']
+#     plotting_tracklet(centers[:,None,:], file_name=f"streamline_plots/center_{i}", title=f"Center {i}")

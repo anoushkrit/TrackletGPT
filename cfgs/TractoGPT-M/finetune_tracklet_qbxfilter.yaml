@@ -7,17 +7,17 @@ dataset:
     train:
       {
         _base_: cfgs/dataset_configs/tracklet_qbxfilter.yaml,
-        others: { subset: "trainset" },
+        others: { subset: "train" },
       },
     val:
       {
         _base_: cfgs/dataset_configs/tracklet_qbxfilter.yaml,
-        others: { subset: "validset" },
+        others: { subset: "val" },
       },
     test:
       {
         _base_: cfgs/dataset_configs/tracklet_qbxfilter.yaml,
-        others: { subset: "testset" },
+        others: { subset: "test" },
       },
   }
 model:
@@ -26,7 +26,7 @@ model:
     trans_dim: 256,
     depth: 9,
     drop_path_rate: 0.1,
-    cls_dim: 32,
+    cls_dim: 71,
     num_heads: 4,
     group_size: 12,
     num_group: 64,
@@ -37,7 +37,7 @@ model:
   }
 
 npoints: 256 # will not be considered with Tracklet Mode
-total_bs: 512
+total_bs: 256
 step_per_update: 1
 max_epoch: 300
 grad_norm_clip: 10

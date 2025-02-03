@@ -7,17 +7,17 @@ dataset:
     train:
       {
         _base_: cfgs/dataset_configs/tracklet_sentence.yaml,
-        others: { subset: "trainset", npoints: 256 },
+        others: { subset: "train", npoints: 256 },
       },
     val:
       {
         _base_: cfgs/dataset_configs/tracklet_sentence.yaml,
-        others: { subset: "validset", npoints: 256 },
+        others: { subset: "val", npoints: 256 },
       },
     test:
       {
         _base_: cfgs/dataset_configs/tracklet_sentence.yaml,
-        others: { subset: "testset", npoints: 256 },
+        others: { subset: "test", npoints: 256 },
       },
   }
 

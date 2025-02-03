@@ -59,6 +59,7 @@ def run_net(args, config, train_writer=None, val_writer=None):
     # build dataset
     # (train_sampler, train_dataloader), (_, test_dataloader), = builder.dataset_builder(args, config.dataset.train), \
     #     builder.dataset_builder(args, config.dataset.val)
+    config.dataset.train._base_.num_workers = args.num_workers
     (train_sampler, train_dataloader)= builder.dataset_builder(args, config.dataset.train)
     (_, extra_train_dataloader) = builder.dataset_builder(
         args, config.dataset.extra_train) if config.dataset.get('extra_train') else (None, None)

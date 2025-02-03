@@ -16,6 +16,7 @@ import plotly.express as px
 # Third-party libraries
 import numpy as np
 import torch
+from torchvision import transforms
 from tqdm import tqdm
 from dipy.io.streamline import load_tractogram
 from torch.utils.data import Dataset
@@ -28,6 +29,12 @@ from utils.config import cfg_from_yaml_file
 from utils.tracklet_ops import get_tracklet_from_streamline
 from utils.streamline_ops import interpolate_streamline
 from utils.qbx_clustering import create_qbx_cluster_from_scratch_n_save
+from datasets import data_transforms_tracklet
+
+data_transforms = transforms.Compose([
+    data_transforms_tracklet.StreamlineRotate(),
+    data_transforms_tracklet.StreamlineFlip(),
+])
 
 def plotting_tracklet(tracklet, file_name="default", title="Tracklet"):
     """
@@ -85,6 +92,7 @@ class Tracklet_QBXFilter(Dataset):
         self.samples_per_subject = config.sample_per_subject
         self.samples_per_class = config.samples_per_class
         self.threshold = config.threshold
+        self.data_transformation = config.data_transformation
         self.test_subjects = config.get('test_subjects', None)
 
         self.max_num_tokens = config.max_num_tokens
@@ -302,8 +310,9 @@ class Tracklet_QBXFilter(Dataset):
         label = self.labels[index]
         label = self.label_to_int_mapping[label]
 
-        # getting tracklet from streamline
+        # getting tracklet from streamline and transforming it
         streamline = interpolate_streamline((streamline, 64))
+        if self.data_transformation and self.split not in ['test', 'testset']: streamline = data_transforms(streamline)
         streamline = self.pc_norm(streamline)
         tracklet = get_tracklet_from_streamline(streamline, apt_param=.4)
         tracklet = np.array([interpolate_streamline((tracklet[i], self.patch_size)) for i in range(len(tracklet))])
