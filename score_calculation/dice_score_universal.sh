@@ -76,6 +76,7 @@ exp_subset=$(python -c "
 pth = '$ckpts'.split('experiments')[-1]
 if len(pth) >=2:
     print(pth.split('/')[1])
+    # print('/'.join(pth.split('/')[1:-4]))
 else:
     print('/')
 ")

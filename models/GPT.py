@@ -30,13 +30,14 @@ class Block(nn.Module):
 
 class GPT_extractor(nn.Module):
     def __init__(
-        self, embed_dim, num_heads, num_layers, num_classes, trans_dim, group_size, pretrained=False
+        self, embed_dim, num_heads, num_layers, num_classes, trans_dim, group_size, pretrained=False, multi_class_classification=False
     ):
         super(GPT_extractor, self).__init__()
 
         self.embed_dim = embed_dim
         self.trans_dim = trans_dim
         self.group_size = group_size
+        self.multi_class_classification = multi_class_classification
 
         # start of sequence token
         self.sos = torch.nn.Parameter(torch.zeros(embed_dim))
@@ -96,8 +97,16 @@ class GPT_extractor(nn.Module):
 
         h = h.transpose(0, 1)
         h = self.cls_norm(h)
-        concat_f = torch.cat([h[:, 1], h[:, 2:].max(1)[0]], dim=-1)
-        ret = self.cls_head_finetune(concat_f)
+        if self.multi_class_classification:
+            cls = h[:, 1, :]
+            feats = h[:, 2:, :]
+            concat_f = torch.cat([cls.unsqueeze(1).repeat(1, feats.size(1), 1), feats], dim=-1)
+            concat_f = concat_f.reshape(batch*(length-1), concat_f.size(-1))
+            ret = self.cls_head_finetune(concat_f)
+            ret = ret.reshape(batch, length-1, ret.size(-1))
+        else:
+            concat_f = torch.cat([h[:, 1], h[:, 2:].max(1)[0]], dim=-1)
+            ret = self.cls_head_finetune(concat_f)
         return ret, encoded_points, concat_f
 
 

@@ -312,7 +312,7 @@ class Tracklet_QBXFilter(Dataset):
 
         # getting tracklet from streamline and transforming it
         streamline = interpolate_streamline((streamline, 64))
-        if self.data_transformation and self.split not in ['test', 'testset']: streamline = data_transforms(streamline)
+        if self.data_transformation and self.split[0] in ['train', 'trainset']: streamline = data_transforms(streamline)
         streamline = self.pc_norm(streamline)
         tracklet = get_tracklet_from_streamline(streamline, apt_param=.4)
         tracklet = np.array([interpolate_streamline((tracklet[i], self.patch_size)) for i in range(len(tracklet))])

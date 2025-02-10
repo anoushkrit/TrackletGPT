@@ -1,20 +1,26 @@
 NAME: Tracklet_Sentence
-# data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/dMRI_data/105HCP
-data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives
+data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/dMRI_data/105HCP
+# data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives
 # data_dir: /s3/DATA/TractoInferno/derivatives
 qbx_save_path: ./data/qbx
 # subset: "trainset"
-dataset: TractoInferno
-# dataset: 105HCP
+# dataset: TractoInferno
+dataset: 105HCP
 
-sample_per_subject: 10000
-samples_per_class: 1000
+sample_per_subject: 1000000000000000
+samples_per_class: 1000000000000
 max_num_tokens: 256
 
 threshold: 7
 max_total_neighbours_count: 12
 considered_neighbours_count: 7
 
-label_to_int_mapping_path: label_int_mappings/label_int_mapping_TrInF.json
+label_to_int_mapping_path: label_int_mappings/label_int_mapping_105HCP.json
 
 EOS_token: False
+test_subjects: ['sub-1175', 'sub-1046', 'sub-1217', '679568']
+test_subjects: ['sub-1047', 'sub-1050', 'sub-1080', '622236']
+test_subjects: ['sub-1146', 'sub-1135', 'sub-1156', '673455']
+test_subjects: ['sub-1164', 'sub-1235', 'sub-1281', '802844']
+test_subjects: ['sub-1175', 'sub-1046', 'sub-1217', '679568']
+test_subjects: ['sub-1047', 'sub-1050', 'sub-1080', '622236']

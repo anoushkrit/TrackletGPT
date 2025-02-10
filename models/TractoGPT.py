@@ -332,8 +332,8 @@ class GPT_Transformer(nn.Module):
         self.is_tracklet = config.is_tracklet
         self.is_tracklet_sentence = config.get('is_tracklet_sentence', False)
 
-        assert self.encoder_dims in [256, 384, 768, 1024]
-        if self.encoder_dims == 384 or self.encoder_dims == 256:
+        assert self.encoder_dims in [128, 256, 384, 768, 1024]
+        if self.encoder_dims <= 384:
             self.encoder = Encoder_small(encoder_channel=self.encoder_dims)
         else:
             self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
@@ -348,6 +348,7 @@ class GPT_Transformer(nn.Module):
             trans_dim=self.trans_dim,
             group_size=self.group_size,
             pretrained=True,
+            multi_class_classification=config.streamline_patch,
         )
 
         self.generator_blocks = GPT_generator(
@@ -398,8 +399,6 @@ class GPT_Transformer(nn.Module):
         relative_norm = torch.norm(relative_position, dim=-1, keepdim=True)
         relative_direction = relative_position / relative_norm
         # print('nan in relative direction', torch.isnan(relative_direction).nonzero())
-        # for i in range(0,len(torch.isnan(relative_direction).nonzero()),3):
-        #     print(padding[i])
         
         position = torch.cat(
             [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
@@ -524,6 +523,23 @@ class TractoGPT(nn.Module):
             padding = pts['padding']
             # neighborhood, center, padding = pts
             EOS_idxs = None
+        elif self.config.streamline_patch:
+            B = pts['streamlines'].shape[0]
+            neighborhood = pts['streamlines']
+            point_cloud = pts['point_cloud']
+            center = pts['center']
+            sorted_indices = self.group_divider.simplied_morton_sorting(point_cloud, center)
+
+            neighborhood = neighborhood.view(
+                B * self.num_group, self.group_size, 3)[sorted_indices, :, :]
+            neighborhood = neighborhood.view(
+                B, self.num_group, self.group_size, 3).contiguous()
+            center = center.view(
+                B * self.num_group, 3)[sorted_indices, :]
+            center = center.view(
+                B, self.num_group, 3).contiguous()
+
+            padding = EOS_idxs = None
         else:
             neighborhood, center = self.group_divider(pts)
             padding = EOS_idxs = None
@@ -588,8 +604,8 @@ class PointTransformer(nn.Module):
         self.group_divider = Group(
             num_group=self.num_group, group_size=self.group_size)
 
-        assert self.encoder_dims in [256, 384, 768, 1024]
-        if self.encoder_dims == 384 or self.encoder_dims == 256:
+        assert self.encoder_dims in [128, 256, 384, 768, 1024]
+        if self.encoder_dims <= 384:
             self.encoder = Encoder_small(encoder_channel=self.encoder_dims)
         else:
             self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
@@ -602,7 +618,8 @@ class PointTransformer(nn.Module):
             num_layers=self.depth,
             num_classes=config.cls_dim,
             trans_dim=self.trans_dim,
-            group_size=self.group_size
+            group_size=self.group_size,
+            multi_class_classification=self.config.streamline_patch,
         )
 
         self.generator_blocks = GPT_generator(
@@ -683,6 +700,9 @@ class PointTransformer(nn.Module):
 
 
     def get_loss_acc(self, ret, gt, class_feat=None, LRC_feat=None, LRC_label=None):
+        if self.config.streamline_patch:
+            ret = ret.reshape(-1, self.cls_dim)
+            gt = gt.reshape(-1)
         loss = self.loss_ce(ret, gt.long())
         pred = ret.argmax(-1)
         acc = (pred == gt).sum() / float(gt.size(0))
@@ -747,6 +767,23 @@ class PointTransformer(nn.Module):
             center = pts['center']
             padding = pts['padding']
             EOS_idxs = None
+        elif self.config.streamline_patch:
+            B = pts['streamlines'].shape[0]
+            neighborhood = pts['streamlines']
+            point_cloud = pts['point_cloud']
+            center = pts['center']
+            sorted_indices = self.group_divider.simplied_morton_sorting(point_cloud, center)
+
+            neighborhood = neighborhood.view(
+                B * self.num_group, self.group_size, 3)[sorted_indices, :, :]
+            neighborhood = neighborhood.view(
+                B, self.num_group, self.group_size, 3).contiguous()
+            center = center.view(
+                B * self.num_group, 3)[sorted_indices, :]
+            center = center.view(
+                B, self.num_group, 3).contiguous()
+
+            padding = EOS_idxs = None
         else:
             neighborhood, center = self.group_divider(pts)
             padding = None

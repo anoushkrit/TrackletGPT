@@ -245,7 +245,7 @@ class Tracklet_Sentence(Dataset):
         for i, data_path in enumerate(data_paths):
             subjects_ = [subject.split('.')[0] for subject in os.listdir(data_path)
                          if os.path.join(data_path, subject).endswith('.pkl')]
-            if self.split[i] == 'test' or self.split[i] == 'testset':
+            if self.split == 'test' or self.split == 'testset':
                 subjects_ = [subject for subject in subjects_ if self.test_subjects is None or subject in self.test_subjects]
             subjects.extend(subjects_)
 
@@ -396,11 +396,11 @@ class Tracklet_Sentence(Dataset):
                 else:
                     EOS_idxs[i+1] = EOS_idxs[i] + len(neighbour_tracklets[i])
         
-        for i in range(len(sentence)-1):
-            if np.all(sentence[i]==0) or np.all(sentence[i+1]==0):
-                print('zero')
-            if np.all(sentence[i]==sentence[i+1]):
-                print('same')
+        # for i in range(len(sentence)-1):
+        #     if np.all(sentence[i]==0) or np.all(sentence[i+1]==0):
+        #         print('zero')
+        #     if np.all(sentence[i]==sentence[i+1]):
+        #         print('same')
 
         # padding the sentence
         padding = len(sentence)
@@ -414,9 +414,10 @@ class Tracklet_Sentence(Dataset):
             'tokens': torch.from_numpy(sentence).float(),
             'center': torch.from_numpy(sentence_centroids).float(),
             'padding': np.float32(padding),
-            'EOS_idxs': torch.tensor(EOS_idxs).float()
+            # 'EOS_idxs': torch.tensor(EOS_idxs).float()
         }
-        if self.split[0] == 'test' or self.split[0] == 'testset':
+        # print(self.split[0])
+        if self.split == 'test' or self.split == 'testset':
             return np.float32(label),[str(self.subject_ids[index]), str(self.streamlines[index])], data
         return np.float32(label), 0, data
         
