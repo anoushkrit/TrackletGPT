@@ -55,7 +55,8 @@ def calculate_hcp_scores_subject(args):
     if len(unique_labels) == 0:
         return (sub, {})
     if 'sub' in sub:
-        tractogram = load_tractogram(f"/scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives/testset/{sub}/tractography/{sub}__{int_label_mapping[unique_labels[0]]}.trk", "same", bbox_valid_check=False)
+        # tractogram = load_tractogram(f"/scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives/testset/{sub}/tractography/{sub}__{int_label_mapping[unique_labels[0]]}.trk", "same", bbox_valid_check=False)
+        tractogram = load_tractogram(f"/s3/DATA/TractoInferno/derivatives/testset/{sub}/tractography/{sub}__{int_label_mapping[unique_labels[0]]}.trk", "same", bbox_valid_check=False)
     else:
         tractogram = load_tractogram(f"/scratch/anoushkrit.scee.iitmandi/DATA/dMRI_data/105HCP/test/{sub}/tracts/{int_label_mapping[unique_labels[0]]}.trk", "same", bbox_valid_check=False)
     dic = {}

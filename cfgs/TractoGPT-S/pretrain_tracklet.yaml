@@ -7,12 +7,12 @@ dataset:
     train:
       {
         _base_: cfgs/dataset_configs/tracklet.yaml,
-        others: { subset: "train", npoints: 1024 },
+        others: { subset: "trainset", npoints: 1024 },
       },
     val:
       {
         _base_: cfgs/dataset_configs/tracklet.yaml,
-        others: { subset: "val", npoints: 1024 },
+        others: { subset: "validset", npoints: 1024 },
       },
     test:
       {
@@ -24,7 +24,7 @@ dataset:
 model:
   {
     NAME: TractoGPT,
-    cls_dim: 71,
+    cls_dim: 32,
     group_size: 12,
     num_group: 64,
     loss: cdl12,
