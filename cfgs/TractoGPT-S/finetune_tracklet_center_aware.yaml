@@ -6,38 +6,40 @@ dataset:
   {
     train:
       {
-        _base_: cfgs/dataset_configs/tracklet_qbxfilter.yaml,
+        _base_: cfgs/dataset_configs/tracklet_center_aware.yaml,
         others: { subset: "trainset" },
       },
     val:
       {
-        _base_: cfgs/dataset_configs/tracklet_qbxfilter.yaml,
+        _base_: cfgs/dataset_configs/tracklet_center_aware.yaml,
         others: { subset: "validset" },
       },
     test:
       {
-        _base_: cfgs/dataset_configs/tracklet_qbxfilter.yaml,
+        _base_: cfgs/dataset_configs/tracklet_center_aware.yaml,
         others: { subset: "testset" },
       },
   }
 model:
   {
     NAME: PointTransformer,
-    trans_dim: 128,
-    depth: 6,
+    trans_dim: 384,
+    depth: 12,
     drop_path_rate: 0.1,
     cls_dim: 32,
-    num_heads: 4,
+    num_heads: 6,
     group_size: 12,
-    num_group: 64,
-    encoder_dims: 128,
-    decoder_depth: 3,
-    is_tracklet: True,
+    num_group: 32,
+    encoder_dims: 384,
+    decoder_depth: 4,
+    is_tracklet: False,
     streamline_patch: False,
+    is_center_aware: True,
     triplet_loss: False,
+
   }
 
-npoints: 256 # will not be considered with Tracklet Mode
+npoints: 1024
 total_bs: 512
 step_per_update: 1
 max_epoch: 300

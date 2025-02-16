@@ -56,9 +56,5 @@ def get_tracklet_from_streamline(streamline, apt_param=0.4) -> list:
 
     # get tracklets from the streamline
     tracklets, tracklet_indices = get_tracklets(crucial_point_indices, streamline, overlap=2)
-    for i in range(len(tracklets)):
-        if len(tracklets[i]) == 1:
-            print(crucial_point_indices)
-            print(len(tracklets), i)
 
     return tracklets

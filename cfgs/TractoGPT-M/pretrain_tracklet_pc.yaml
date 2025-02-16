@@ -6,18 +6,18 @@ dataset:
   {
     train:
       {
-        _base_: cfgs/dataset_configs/streamline_patch_TrInF.yaml,
-        others: { subset: "trainset", npoints: 256 },
+        _base_: cfgs/dataset_configs/tracklet_pc_TrInF.yaml,
+        others: { subset: "trainset", npoints: 1024 },
       },
     val:
       {
-        _base_: cfgs/dataset_configs/streamline_patch_TrInF.yaml,
-        others: { subset: "validset", npoints: 256 },
+        _base_: cfgs/dataset_configs/tracklet_pc_TrInF.yaml,
+        others: { subset: "validset", npoints: 1024 },
       },
     test:
       {
-        _base_: cfgs/dataset_configs/streamline_patch_TrInF.yaml,
-        others: { subset: "testset", npoints: 256 },
+        _base_: cfgs/dataset_configs/tracklet_pc_TrInF.yaml,
+        others: { subset: "testset", npoints: 1024 },
       },
   }
 
@@ -27,8 +27,7 @@ model:
     cls_dim: 32,
     group_size: 32,
     num_group: 64,
-    is_tracklet: False,
-    streamline_patch: True,
+    num_groups_for_pc: 32,
     loss: cdl12,
     weight_center: 1,
     keep_attend: 10,
@@ -44,9 +43,13 @@ model:
         decoder_depth: 4,
         decoder_num_heads: 6,
       },
+      is_tracklet: False,
+      streamline_patch: False,
+      is_tracklet_pc: True,
+
   }
 
-npoints: 256
-total_bs: 256  # bs==1 when using custom batch created using dataloader
+npoints: 1024
+total_bs: 256
 step_per_update: 1
 max_epoch: 300

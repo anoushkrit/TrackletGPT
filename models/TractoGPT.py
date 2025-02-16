@@ -262,6 +262,41 @@ class Group(nn.Module):
         #     self.plot_3d_point_cloud(center[i].cpu().numpy())
         return neighborhood, center
 
+class CenterAwareEmbedding(nn.Module):
+    """uses the tracklet minus center point of the subject to create the embedding
+    this embedding is learnable
+    
+    Args:
+        d_model: Number of dimensions to encode into
+    """
+    # input to forward will be B, num_groups, group_size, 3
+    # output should be B, num_groups, d_model
+    def __init__(self, d_model: int = 256, num_groups: int = 64, group_size: int = 12):
+        super().__init__()
+
+        self.d_model = d_model
+        self.num_groups = num_groups
+        self.group_size = group_size
+
+        self.embedding = nn.Sequential(
+            nn.Linear(group_size, 128),
+            nn.GELU(),
+            nn.Linear(128, d_model)
+        )
+
+    def forward(self, xyz: torch.Tensor) -> torch.Tensor:
+        
+
+        # finding distance from the center
+        xyz = xyz ** 2 # B, num_groups, group_size, 3
+        xyz = torch.sum(xyz, dim=-1) # B, num_groups, group_size
+        xyz = torch.sqrt(xyz) # B, num_groups, group_size
+        
+        embd = self.embedding(xyz) # B, num_groups, d_model
+
+        return embd
+
+
 
 class PositionEmbeddingCoordsSine(nn.Module):
     """Similar to transformer's position encoding, but generalizes it to
@@ -331,6 +366,8 @@ class GPT_Transformer(nn.Module):
 
         self.is_tracklet = config.is_tracklet
         self.is_tracklet_sentence = config.get('is_tracklet_sentence', False)
+        self.is_center_aware = config.get('is_center_aware', False)
+        self.is_tracklet_pc = config.get('is_tracklet_pc', False)
 
         assert self.encoder_dims in [128, 256, 384, 768, 1024]
         if self.encoder_dims <= 384:
@@ -339,6 +376,8 @@ class GPT_Transformer(nn.Module):
             self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
 
         self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
+        if self.is_center_aware:
+            self.center_aware_embedding = CenterAwareEmbedding(self.encoder_dims, config.num_group, config.group_size)
 
         self.blocks = GPT_extractor(
             embed_dim=self.encoder_dims,
@@ -386,36 +425,33 @@ class GPT_Transformer(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, neighborhood, center, padding=None, EOS_idxs=None, noaug=False, classify=False):
+    def forward(self, neighborhood, center, center_aware=None, padding=None, EOS_idxs=None, noaug=False, classify=False):
         # error handling
-        if self.is_tracklet and padding is None:
+        if (self.is_tracklet or self.is_tracklet_pc) and padding is None:
             raise ValueError('padding is None in tracklet mode')
+        if self.is_center_aware and center_aware is None:
+            raise ValueError('center_aware is None in center_aware mode')
         
         # generate mask
         group_input_tokens = self.encoder(neighborhood)  # B G C
+        if self.is_center_aware:
+            center_aware_embd = self.center_aware_embedding(center_aware)
+            group_input_tokens = group_input_tokens + center_aware_embd
         batch_size, seq_len, C = group_input_tokens.size()
 
+        # position embedding
         relative_position = center[:, 1:, :] - center[:, :-1, :]
         relative_norm = torch.norm(relative_position, dim=-1, keepdim=True)
         relative_direction = relative_position / relative_norm
-        # print('nan in relative direction', torch.isnan(relative_direction).nonzero())
-        
         position = torch.cat(
-            [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
-        # if self.is_tracklet:
-        #     # print(padding.shape)
-        #     # print(position.shape)
-        #     for i in range(batch_size):
-        #         position[i, int(padding[i]):, :] = 0
-        # print('nan in position', torch.isnan(position).any())   
-        # print('nan in position', torch.isnan(position).nonzero())         
-
+            [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)     
         pos_relative = self.pos_embed(position)
 
         sos_pos = self.sos_pos.expand(batch_size, -1, -1)
         pos_absolute = self.pos_embed(center[:, :-1, :])
         pos_absolute = torch.cat([sos_pos, pos_absolute], dim=1)
 
+        # mask for dual masking (casual + random)
         attn_mask = torch.full(
             (seq_len, seq_len), -float("Inf"), device=group_input_tokens.device, dtype=group_input_tokens.dtype
         ).to(torch.bool)
@@ -443,7 +479,7 @@ class GPT_Transformer(nn.Module):
             # key_padding_mask to handle the padding
             key_padding_mask = None
             considered_tokens = torch.full((batch_size, seq_len), True).to(torch.bool).to('cuda')
-            if padding is not None:
+            if padding is not None and not self.is_tracklet_pc:
                 # create the key_padding_mask
                 key_padding_mask = torch.arange(seq_len).expand(batch_size, seq_len).to('cuda') >= padding.unsqueeze(1)
                 key_padding_mask = key_padding_mask.to(torch.bool)
@@ -453,12 +489,14 @@ class GPT_Transformer(nn.Module):
                 pos_absolute[key_padding_mask] = 0
                 pos_relative[key_padding_mask] = 0
                 # print(pos_relative[0])
+            elif padding is not None and self.is_tracklet_pc:
+                key_padding_mask = padding
+                considered_tokens = ~key_padding_mask
 
-        if torch.isnan(group_input_tokens).any() or torch.isnan(pos_absolute).any() or torch.isnan(pos_relative).any():
-            print('nan in group_input_tokens', torch.isnan(group_input_tokens).any())
-            print('nan in pos_absolute', torch.isnan(pos_absolute).any())
-            print('nan in pos_relative', torch.isnan(pos_relative).any())
-            print(len(torch.isnan(pos_relative).nonzero()))
+                # modifying pos_absolute and pos_relative
+                pos_absolute[key_padding_mask] = 0
+                pos_relative[key_padding_mask] = 0
+
         # transformer
         if classify == False:
             encoded_features = self.blocks(
@@ -490,10 +528,16 @@ class TractoGPT(nn.Module):
 
         self.is_tracklet = config.is_tracklet
         self.is_tracklet_sentence = config.get('is_tracklet_sentence', False)
+        self.is_center_aware = config.get('is_center_aware', False)
+        self.is_tracklet_pc = config.get('is_tracklet_pc', False)
         print_log(
             f'[TractoGPT] divide point cloud into G{self.num_group} x S{self.group_size} points ...', logger='TractoGPT')
-        self.group_divider = Group(
-            num_group=self.num_group, group_size=self.group_size)
+        if self.is_tracklet_pc:
+            self.group_divider = Group(
+                num_group=self.config.num_groups_for_pc, group_size=self.group_size)
+        else:
+            self.group_divider = Group(
+                num_group=self.num_group, group_size=self.group_size)
 
         self.loss = config.loss
 
@@ -517,12 +561,14 @@ class TractoGPT(nn.Module):
             center = pts['center']
             padding = pts['padding']
             EOS_idxs = pts['EOS_idxs']
+
+            center_aware = None
         elif self.is_tracklet:
             neighborhood = pts['tokens']
             center = pts['center']
             padding = pts['padding']
             # neighborhood, center, padding = pts
-            EOS_idxs = None
+            EOS_idxs = center_aware = None
         elif self.config.streamline_patch:
             B = pts['streamlines'].shape[0]
             neighborhood = pts['streamlines']
@@ -539,10 +585,30 @@ class TractoGPT(nn.Module):
             center = center.view(
                 B, self.num_group, 3).contiguous()
 
-            padding = EOS_idxs = None
+            padding = EOS_idxs = center_aware = None
+        elif self.is_center_aware:
+            neighborhood = pts['tokens']
+            center = pts['center']
+            padding = pts['padding']
+            center_aware = pts['tracklet_minus_center']
+
+            EOS_idxs = None 
+        elif self.is_tracklet_pc:
+            tracklet = pts['tracklet']
+            tracklet_center = pts['tracklet_center']
+            padding = pts['padding']
+            pc = pts['pc']
+            neighborhood, center = self.group_divider(pc)
+
+            tracklet[:,-self.config.num_groups_for_pc:, :, :] = neighborhood
+            tracklet_center[:,-self.config.num_groups_for_pc:, :] = center
+            neighborhood = tracklet
+            center = tracklet_center
+
+            EOS_idxs = center_aware = None
         else:
             neighborhood, center = self.group_divider(pts)
-            padding = EOS_idxs = None
+            padding = EOS_idxs = center_aware = None
 
         # print('nan in neighborhood', torch.isnan(neighborhood).any())
         # print('nan in center', torch.isnan(center).any())
@@ -551,7 +617,7 @@ class TractoGPT(nn.Module):
         B = neighborhood.shape[0]
 
         generated_points, considered_tokens = self.GPT_Transformer(
-            neighborhood, center, padding, EOS_idxs)
+            neighborhood, center, center_aware, padding, EOS_idxs)
 
         gt_points = neighborhood.reshape(
             B*(self.num_group), self.group_size, 3)
@@ -600,9 +666,15 @@ class PointTransformer(nn.Module):
         self.triplet_loss = config.triplet_loss
 
         self.is_tracklet = config.is_tracklet
+        self.is_center_aware = config.get('is_center_aware', False)
+        self.is_tracklet_pc = config.get('is_tracklet_pc', False)
 
-        self.group_divider = Group(
-            num_group=self.num_group, group_size=self.group_size)
+        if self.is_tracklet_pc:
+            self.group_divider = Group(
+                num_group=self.config.num_groups_for_pc, group_size=self.group_size)
+        else:
+            self.group_divider = Group(
+                num_group=self.num_group, group_size=self.group_size)
 
         assert self.encoder_dims in [128, 256, 384, 768, 1024]
         if self.encoder_dims <= 384:
@@ -611,6 +683,8 @@ class PointTransformer(nn.Module):
             self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
 
         self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
+        if self.is_center_aware:
+            self.center_aware_embedding = CenterAwareEmbedding(self.encoder_dims, config.num_group, config.group_size)
 
         self.blocks = GPT_extractor(
             embed_dim=self.encoder_dims,
@@ -766,7 +840,7 @@ class PointTransformer(nn.Module):
             neighborhood = pts['tokens']
             center = pts['center']
             padding = pts['padding']
-            EOS_idxs = None
+            EOS_idxs = center_aware = None
         elif self.config.streamline_patch:
             B = pts['streamlines'].shape[0]
             neighborhood = pts['streamlines']
@@ -783,12 +857,36 @@ class PointTransformer(nn.Module):
             center = center.view(
                 B, self.num_group, 3).contiguous()
 
-            padding = EOS_idxs = None
+            padding = EOS_idxs = center_aware = None
+        elif self.is_center_aware:
+            neighborhood = pts['tokens']
+            center = pts['center']
+            padding = pts['padding']
+            center_aware = pts['tracklet_minus_center']
+
+            EOS_idxs = None
+        elif self.is_tracklet_pc:
+            tracklet = pts['tracklet']
+            tracklet_center = pts['tracklet_center']
+            padding = pts['padding']
+            pc = pts['pc']
+            neighborhood, center = self.group_divider(pc)
+
+            tracklet[:,-self.config.num_groups_for_pc:, :, :] = neighborhood
+            tracklet_center[:,-self.config.num_groups_for_pc:, :] = center
+            neighborhood = tracklet
+            center = tracklet_center
+
+            EOS_idxs = center_aware = None
         else:
             neighborhood, center = self.group_divider(pts)
-            padding = None
+            padding = center_aware = EOS_idxs = None
+        
+        # encoding tokens using mini pointnet
         group_input_tokens = self.encoder(neighborhood)  # B G N
-
+        if self.is_center_aware:
+            center_aware_embd = self.center_aware_embedding(center_aware)
+            group_input_tokens = group_input_tokens + center_aware_embd
         B, L, _ = group_input_tokens.shape
 
         cls_tokens = self.cls_token.expand(B, -1, -1)
@@ -814,14 +912,16 @@ class PointTransformer(nn.Module):
         ).to(torch.bool)
         attn_mask = torch.triu(attn_mask, diagonal=1)
         key_padding_mask = None
-        if self.is_tracklet:
+        if padding is not None and not self.is_tracklet_pc:
             # key padding mask
             key_padding_mask = torch.arange(L+2).expand(B, L+2).cuda() >= (padding.unsqueeze(1)+2)
             key_padding_mask = key_padding_mask.to(torch.bool)
 
             # modifying pos
             pos[key_padding_mask] = 0
-
+        elif padding is not None and self.is_tracklet_pc:
+            key_padding_mask = torch.concatenate((torch.full((B, 2), False).to(torch.bool), padding), dim=1)
+            pos[key_padding_mask] = 0
 
         # transformer
         ret, encoded_features, class_feat = self.blocks(x, pos, attn_mask, key_padding_mask, classify=True)
@@ -836,7 +936,7 @@ class PointTransformer(nn.Module):
         attn_mask = torch.triu(attn_mask, diagonal=1)
         key_padding_mask = None
         considered_tokens = torch.full((B, L), True).to(torch.bool)
-        if self.is_tracklet:
+        if padding is not None and not self.is_tracklet_pc:
             # key padding mask
             key_padding_mask = torch.arange(L).expand(B, L).cuda() >= padding.unsqueeze(1)
             key_padding_mask = key_padding_mask.to(torch.bool)
@@ -844,6 +944,13 @@ class PointTransformer(nn.Module):
 
             # modifying pos_relative
             pos_relative[key_padding_mask] = 0
+        elif padding is not None and self.is_tracklet_pc:
+            key_padding_mask = padding
+            considered_tokens = ~key_padding_mask
+
+            # modifying pos_relative
+            pos_relative[key_padding_mask] = 0
+        
 
         generated_points = self.generator_blocks(
             encoded_features, pos_relative, attn_mask, key_padding_mask)
