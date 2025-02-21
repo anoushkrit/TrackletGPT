@@ -263,7 +263,8 @@ class Tracklet(Dataset):
         if self.data_transformation and self.split not in ['test', 'testset']: streamline = data_transforms(streamline)
         streamline = self.pc_norm(streamline)
         tracklet = get_tracklet_from_streamline(streamline, apt_param=.4)
-        tracklet = np.array([interpolate_streamline((tracklet[i], self.patch_size)) for i in range(len(tracklet))])
+        # tracklet = np.array([interpolate_streamline((tracklet[i], self.patch_size)) for i in range(len(tracklet))])
+        tracklet = np.array(list(map(lambda x: interpolate_streamline((x, self.patch_size)), tracklet)))
 
         # zero padding
         padding = len(tracklet)
@@ -274,7 +275,7 @@ class Tracklet(Dataset):
 
         # normalizing tracklet with respect to the center points
         tracklet_center = np.median(tracklet, axis=1)
-        tracklet = tracklet - tracklet_center[:, None, :]
+        # tracklet = tracklet - tracklet_center[:, None, :], this part is handled in the model
 
         data = {
             'tokens': torch.from_numpy(tracklet).float(),

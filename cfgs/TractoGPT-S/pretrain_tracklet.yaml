@@ -26,7 +26,7 @@ model:
     NAME: TractoGPT,
     cls_dim: 32,
     group_size: 12,
-    num_group: 64,
+    num_group: 32,
     loss: cdl12,
     weight_center: 1,
     keep_attend: 7,

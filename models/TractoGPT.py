@@ -17,6 +17,7 @@ import math
 from models.z_order import *
 import similaritymeasures
 import pickle
+from models.encoder import GAT, LSTMencoder
 
 class STN3d(nn.Module):
     def __init__(self, channel):
@@ -353,6 +354,8 @@ class GPT_Transformer(nn.Module):
         super().__init__()
         self.config = config
         # define the transformer argparse
+        self.graph_config = config.get('graph_config', None)
+        self.lstm_config = config.get('lstm_config', None)
         self.mask_ratio = config.transformer_config.mask_ratio
         self.trans_dim = config.transformer_config.trans_dim
         self.depth = config.transformer_config.depth
@@ -375,6 +378,11 @@ class GPT_Transformer(nn.Module):
         else:
             self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
 
+        if self.graph_config is not None:
+            self.graph_encoder = GAT(self.graph_config)
+        if self.lstm_config is not None:
+            self.LSTMencoder = LSTMencoder(self.lstm_config)
+        
         self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
         if self.is_center_aware:
             self.center_aware_embedding = CenterAwareEmbedding(self.encoder_dims, config.num_group, config.group_size)
@@ -426,6 +434,7 @@ class GPT_Transformer(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, neighborhood, center, center_aware=None, padding=None, EOS_idxs=None, noaug=False, classify=False):
+        B, _, _, _ = neighborhood.size()
         # error handling
         if (self.is_tracklet or self.is_tracklet_pc) and padding is None:
             raise ValueError('padding is None in tracklet mode')
@@ -434,6 +443,12 @@ class GPT_Transformer(nn.Module):
         
         # generate mask
         group_input_tokens = self.encoder(neighborhood)  # B G C
+        if self.graph_config is not None:
+            group_input_tokens = self.graph_encoder(group_input_tokens)
+            group_input_tokens = group_input_tokens.view(B, self.num_groups, -1)
+        if self.lstm_config is not None:
+            group_input_tokens, _ = self.LSTMencoder(group_input_tokens)
+
         if self.is_center_aware:
             center_aware_embd = self.center_aware_embedding(center_aware)
             group_input_tokens = group_input_tokens + center_aware_embd
@@ -519,6 +534,8 @@ class TractoGPT(nn.Module):
         super().__init__()
         print_log(f'[TractoGPT] ', logger='TractoGPT')
         self.config = config
+        self.graph_config = config.get('graph_config', None)
+        self.lstm_config = config.get('lstm_config', None)
         self.trans_dim = config.transformer_config.trans_dim
         self.GPT_Transformer = GPT_Transformer(config)
         self.group_size = config.group_size
@@ -563,11 +580,13 @@ class TractoGPT(nn.Module):
             EOS_idxs = pts['EOS_idxs']
 
             center_aware = None
-        elif self.is_tracklet:
+        elif self.is_tracklet: # neighborhood are not normalized with respect to center in this case
             neighborhood = pts['tokens']
             center = pts['center']
             padding = pts['padding']
-            # neighborhood, center, padding = pts
+            if self.graph_config is None and self.lstm_config is None:
+                neighborhood = neighborhood - center.unsqueeze(2)
+
             EOS_idxs = center_aware = None
         elif self.config.streamline_patch:
             B = pts['streamlines'].shape[0]
