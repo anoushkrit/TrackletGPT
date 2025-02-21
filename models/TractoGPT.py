@@ -920,7 +920,7 @@ class PointTransformer(nn.Module):
             # modifying pos
             pos[key_padding_mask] = 0
         elif padding is not None and self.is_tracklet_pc:
-            key_padding_mask = torch.concatenate((torch.full((B, 2), False).to(torch.bool), padding), dim=1)
+            key_padding_mask = torch.concatenate((torch.full((B, 2), False).to(torch.bool).to('cuda'), padding), dim=1)
             pos[key_padding_mask] = 0
 
         # transformer

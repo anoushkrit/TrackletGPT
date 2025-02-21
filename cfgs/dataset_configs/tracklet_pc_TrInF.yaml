@@ -3,7 +3,7 @@ NAME: Tracklet_pc_TrInF
 data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives
 # data_dir: /s3/DATA/TractoInferno/derivatives
 qbx_save_dir: ./data/qbx
-subset: "trainset"
+# subset: "trainset"
 dataset: TractoInferno
 
 samples_per_class_per_subject: 300
@@ -12,7 +12,7 @@ data_transformation: True
 max_num_tokens: 64
 num_tokens_for_pc: 32
 streamline_threshold_per_cluster: 10
-num_workers: 40
+# num_workers: 40
 
 
 label_to_int_mapping_path: label_int_mappings/label_int_mapping_TrInF.json

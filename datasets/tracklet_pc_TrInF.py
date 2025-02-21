@@ -31,7 +31,7 @@ from utils.tracklet_ops import get_tracklet_from_streamline
 from utils.streamline_ops import *
 from utils.qbx_clustering import create_qbx_cluster_from_scratch_n_save
 from datasets import data_transforms_tracklet
-# from .build import DATASETS
+from .build import DATASETS
 
 data_transforms = transforms.Compose([
     # data_transforms_tracklet.StreamlineFlip(),
@@ -168,7 +168,7 @@ def concat_streamlines(args):
 
     
     return club_streamlines
-# @DATASETS.register_module()
+@DATASETS.register_module()
 class Tracklet_pc_TrInF(Dataset):
 
     def __init__(self,config):
@@ -378,15 +378,15 @@ if __name__ == '__main__':
     config = cfg_from_yaml_file(config_path)
     dataset = Tracklet_pc_TrInF(config)
 
-    print(len(dataset.streamlines), len(dataset.labels), len(dataset.cluster_id), len(dataset.pc_cluster))
-    subject_cluster = {}
-    for i in range(len(dataset.cluster_id)):
-        if dataset.subjects[i] not in subject_cluster:
-            subject_cluster[dataset.subjects[i]] = 0
-        subject_cluster[dataset.subjects[i]] = max(subject_cluster[dataset.subjects[i]], dataset.cluster_id[i])
+    # print(len(dataset.streamlines), len(dataset.labels), len(dataset.cluster_id), len(dataset.pc_cluster))
+    # subject_cluster = {}
+    # for i in range(len(dataset.cluster_id)):
+    #     if dataset.subjects[i] not in subject_cluster:
+    #         subject_cluster[dataset.subjects[i]] = 0
+    #     subject_cluster[dataset.subjects[i]] = max(subject_cluster[dataset.subjects[i]], dataset.cluster_id[i])
     
-    for subject in subject_cluster.keys():
-        print(f'{subject}: {subject_cluster[subject]}, {len(dataset.pc_cluster[subject])}')
+    # for subject in subject_cluster.keys():
+    #     print(f'{subject}: {subject_cluster[subject]}, {len(dataset.pc_cluster[subject])}')
 
     # for i in range(200):
     #     idx = np.random.randint(len(dataset))
@@ -396,12 +396,21 @@ if __name__ == '__main__':
     #     plot_point_cloud(pc.numpy(), red_points=tracklet_center.numpy(), filename=f'streamline_plots/{label}_{i}', title=f'Label: {label}')
 
     subject_to_label_to_streamlines = defaultdict(lambda: defaultdict(list))
+    os.makedirs('streamline_plots', exist_ok=True)
+    label_to_count = {}
     for i in range(len(dataset.streamlines)):
         subject_to_label_to_streamlines[dataset.subjects[i]][dataset.labels[i]].append(dataset.streamlines[i])
     for subject in subject_to_label_to_streamlines.keys():
         for label in subject_to_label_to_streamlines[subject].keys():
+            # print(f'{subject}: {label} - {len(subject_to_label_to_streamlines[subject][label])}')
+            if label not in label_to_count:
+                label_to_count[label] = 0
+            label_to_count[label] += len(subject_to_label_to_streamlines[subject][label])
             subject_to_label_to_streamlines[subject][label] = np.concatenate(subject_to_label_to_streamlines[subject][label], axis=0)
-            subject_to_label_to_streamlines[subject][label] = subject_to_label_to_streamlines[subject][
+            subject_to_label_to_streamlines[subject][label] = subject_to_label_to_streamlines[subject][label][
                 np.random.choice(len(subject_to_label_to_streamlines[subject][label]), 2048, replace=True)
             ]
-            plot_point_cloud(subject_to_label_to_streamlines[subject][label], filename=f'streamline_plots/{subject}_{label}', title=f'Subject: {subject}, Label: {label}')
+            # print(subject_to_label_to_streamlines[subject][label].shape)
+            # plot_point_cloud(subject_to_label_to_streamlines[subject][label], filename=f'streamline_plots/{subject}_{label}', title=f'Subject: {subject}, Label: {label}')
+        # break
+    print(label_to_count)
