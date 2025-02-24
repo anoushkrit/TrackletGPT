@@ -47,7 +47,7 @@ model:
     is_tracklet_pc: False,
     lstm_config:
       {
-        encoder_dim: 384,
+        encoder_dim: 36,
         hidden_dim: 192,
         num_layers: 4,
         bidirectional: True,

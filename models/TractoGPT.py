@@ -442,12 +442,15 @@ class GPT_Transformer(nn.Module):
             raise ValueError('center_aware is None in center_aware mode')
         
         # generate mask
-        group_input_tokens = self.encoder(neighborhood)  # B G C
+        # group_input_tokens = self.encoder(neighborhood)  # B G C
+        group_input_tokens = self.encoder(neighborhood-center.unsqueeze(2))  # B G C
         if self.graph_config is not None:
             group_input_tokens = self.graph_encoder(group_input_tokens)
             group_input_tokens = group_input_tokens.view(B, self.num_groups, -1)
         if self.lstm_config is not None:
-            group_input_tokens, _ = self.LSTMencoder(group_input_tokens)
+            # group_input_tokens, _ = self.LSTMencoder(group_input_tokens)
+            lstm_tokens, _ = self.LSTMencoder(neighborhood.view(B, self.num_groups, -1))
+            group_input_tokens = group_input_tokens + lstm_tokens
 
         if self.is_center_aware:
             center_aware_embd = self.center_aware_embedding(center_aware)
@@ -670,6 +673,8 @@ class PointTransformer(nn.Module):
         super().__init__()
         self.config = config
 
+        self.lstm_config = config.get('lstm_config', None)
+        self.graph_config = config.get('graph_config', None)
         self.trans_dim = config.trans_dim
         self.depth = config.depth
         self.decoder_depth = config.decoder_depth
@@ -694,6 +699,10 @@ class PointTransformer(nn.Module):
         else:
             self.group_divider = Group(
                 num_group=self.num_group, group_size=self.group_size)
+        if self.lstm_config is not None:
+            self.LSTMencoder = LSTMencoder(self.lstm_config)
+        if self.graph_config is not None:
+            self.graph_encoder = GAT(self.graph_config)
 
         assert self.encoder_dims in [128, 256, 384, 768, 1024]
         if self.encoder_dims <= 384:
@@ -859,6 +868,8 @@ class PointTransformer(nn.Module):
             neighborhood = pts['tokens']
             center = pts['center']
             padding = pts['padding']
+            if self.graph_config is None and self.lstm_config is None:
+                neighborhood = neighborhood - center.unsqueeze(2)
             EOS_idxs = center_aware = None
         elif self.config.streamline_patch:
             B = pts['streamlines'].shape[0]
@@ -902,7 +913,14 @@ class PointTransformer(nn.Module):
             padding = center_aware = EOS_idxs = None
         
         # encoding tokens using mini pointnet
+
         group_input_tokens = self.encoder(neighborhood)  # B G N
+        if self.graph_config is not None:
+            group_input_tokens = self.graph_encoder(group_input_tokens)
+            group_input_tokens = group_input_tokens.view(B, self.num_groups, -1)
+        if self.lstm_config is not None:
+            group_input_tokens, _ = self.LSTMencoder(group_input_tokens)
+
         if self.is_center_aware:
             center_aware_embd = self.center_aware_embedding(center_aware)
             group_input_tokens = group_input_tokens + center_aware_embd

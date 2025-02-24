@@ -5,38 +5,6 @@ from torch_geometric.nn import GATConv
 from torch_geometric.data import Data, Batch
 from torch_geometric.nn import knn_graph
 
-# ===== BATCHED GRAPH CONSTRUCTION =====
-def construct_knn_graph_batch(batch_point_embeddings, k=8):
-    """
-    Constructs a batched k-NN graph from a batch of variable-sized PointNet embeddings.
-
-    Args:
-        batch_point_embeddings (list of torch.Tensor): List of tensors of shape (num_patches, feature_dim) for each sample.
-        k (int): Number of neighbors for k-NN graph.
-
-    Returns:
-        torch_geometric.data.Batch: Batched graph data object.
-    """
-    graph_list = []
-
-    for i, point_embeddings in enumerate(batch_point_embeddings):
-        num_patches = point_embeddings.shape[0]
-
-        # If num_patches < k, reduce k to avoid errors
-        k_neighbors = min(k, num_patches - 1) if num_patches > 1 else 1  
-
-        # Compute k-NN graph for this sample
-        edge_index = knn_graph(point_embeddings, k=k_neighbors, loop=False)
-
-        # Create PyG Data object
-        graph_data = Data(x=point_embeddings, edge_index=edge_index)
-        graph_list.append(graph_data)
-
-    # Combine variable-sized graphs into a batch
-    batched_graph = Batch.from_data_list(graph_list)
-
-    return batched_graph
-
 # ===== GAT FOR BATCHED GRAPHS =====
 class GAT(torch.nn.Module):
     def __init__(self, config):

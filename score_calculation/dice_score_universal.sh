@@ -100,7 +100,8 @@ subject_blocks=(
 
 base_model_command="CUDA_VISIBLE_DEVICES=0 python main.py --num_workers 40 --config $config --test --exp_name $exp_name --ckpts $ckpts --exp_subset $exp_subset"
 dice_score_command="python score_calculation/dice_score_universal.py --model $model --dataset_name $dataset_name --exp_name $exp_name --exp_subset $exp_subset --mapping_path $mapping_path"
-avg_calc_command="python score_calculation/average_n_acc_calculator.py --model $model --dataset_name $dataset_name --exp_name $exp_name --exp_subset $exp_subset --mapping_path $mapping_path"
+avg_calc_command="python score_calculation/weighted_average_n_acc_calculator.py --model $model --dataset_name $dataset_name --exp_name $exp_name --exp_subset $exp_subset --mapping_path $mapping_path"
+avg_accumulation_command="python score_calculation/average_calculator.py --model $model --dataset_name $dataset_name --exp_name $exp_name --exp_subset $exp_subset --mapping_path $mapping_path"
 # Loop through each subject_ids block
 for i in "${!subject_blocks[@]}"
 do
