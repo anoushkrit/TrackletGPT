@@ -259,22 +259,28 @@ class Tracklet(Dataset):
         label = self.label_to_int_mapping[label]
 
         # getting tracklet from streamline and randomly transforming it
+        # tic1 = datetime.datetime.now()
         streamline = interpolate_streamline((streamline, 64))
+        # tic2 = datetime.datetime.now()
         if self.data_transformation and self.split not in ['test', 'testset']: streamline = data_transforms(streamline)
         streamline = self.pc_norm(streamline)
+        # tic3 = datetime.datetime.now()
         tracklet = get_tracklet_from_streamline(streamline, apt_param=.4)
+        # tic4 = datetime.datetime.now()
         # tracklet = np.array([interpolate_streamline((tracklet[i], self.patch_size)) for i in range(len(tracklet))])
         tracklet = np.array(list(map(lambda x: interpolate_streamline((x, self.patch_size)), tracklet)))
+        # tic5 = datetime.datetime.now()
 
         # zero padding
         padding = len(tracklet)
         tracklet = self.zero_padding(tracklet)
+        # tic6 = datetime.datetime.now()
         # tracklet = self.repeat_last_padding(tracklet)
         # tracklet = self.repeat_all_padding(tracklet)
         # tracklet = self.pad_with_noise(tracklet)
 
         # normalizing tracklet with respect to the center points
-        tracklet_center = np.median(tracklet, axis=1)
+        tracklet_center = np.mean(tracklet, axis=1)
         # tracklet = tracklet - tracklet_center[:, None, :], this part is handled in the model
 
         data = {
@@ -282,6 +288,8 @@ class Tracklet(Dataset):
             'center': torch.from_numpy(tracklet_center).float(),
             'padding': np.float32(padding)
         }
+        # toc = datetime.datetime.now()
+        # print(tic2-tic1, tic3-tic2, tic4-tic3, tic5-tic4, tic6-tic5, toc-tic6)
         if self.split[0] == 'test' or self.split[0] == 'testset':
             return np.float32(label),[str(self.subject_ids[index]), str(self.streamlines[index])],data
         return np.float32(label),0,data

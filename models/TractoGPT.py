@@ -371,6 +371,7 @@ class GPT_Transformer(nn.Module):
         self.is_tracklet_sentence = config.get('is_tracklet_sentence', False)
         self.is_center_aware = config.get('is_center_aware', False)
         self.is_tracklet_pc = config.get('is_tracklet_pc', False)
+        self.pos_abs_relative = config.get('pos_abs_rel', False)
 
         assert self.encoder_dims in [128, 256, 384, 768, 1024]
         if self.encoder_dims <= 384:
@@ -468,6 +469,10 @@ class GPT_Transformer(nn.Module):
         sos_pos = self.sos_pos.expand(batch_size, -1, -1)
         pos_absolute = self.pos_embed(center[:, :-1, :])
         pos_absolute = torch.cat([sos_pos, pos_absolute], dim=1)
+
+        # add pos absolute and pos relative to the input tokens
+        if self.pos_abs_relative:
+            pos_absolute[:, 1:] = pos_absolute[:, 1:] + pos_relative[:,1:]            
 
         # mask for dual masking (casual + random)
         attn_mask = torch.full(
@@ -692,6 +697,7 @@ class PointTransformer(nn.Module):
         self.is_tracklet = config.is_tracklet
         self.is_center_aware = config.get('is_center_aware', False)
         self.is_tracklet_pc = config.get('is_tracklet_pc', False)
+        self.pos_abs_relative = config.get('pos_abs_relative', False)
 
         if self.is_tracklet_pc:
             self.group_divider = Group(
@@ -940,6 +946,10 @@ class PointTransformer(nn.Module):
             [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
         pos_relative = self.pos_embed(position)
 
+        # add pos absolute and pos relative to the input tokens
+        if self.pos_abs_relative:
+            pos[:, 1:-1] = pos[:, 1:-1] + pos_relative[:, 1:]            
+        
         x = torch.cat((cls_tokens, group_input_tokens), dim=1)
         pos = torch.cat((cls_pos, pos), dim=1)
 
