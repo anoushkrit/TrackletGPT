@@ -17,7 +17,7 @@ dataset:
     test:
       {
         _base_: cfgs/dataset_configs/tracklet.yaml,
-        others: { subset: "test", npoints: 1024 },
+        others: { subset: "testset", npoints: 1024 },
       },
   }
 
@@ -43,9 +43,12 @@ model:
         decoder_num_heads: 6,
       },
       is_tracklet: True,
+      pos_abs_relative: True,
+      streamline_patch: False,
+      is_tracklet_pc: False,
   }
 
-npoints: 1024
-total_bs: 426
+npoints: 256
+total_bs: 512
 step_per_update: 1
 max_epoch: 300

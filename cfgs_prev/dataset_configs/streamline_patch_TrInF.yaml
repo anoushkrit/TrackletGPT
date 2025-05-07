@@ -1,0 +1,14 @@
+NAME: Streamline_Patch_TrInF
+
+data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives
+# data_dir: /s3/DATA/TractoInferno/derivatives
+dataset: TractoInferno
+# subset: testset
+# num_workers: 40
+sample_per_subject: 10000
+samples_per_class: 1000
+patch_size: 32
+max_num_tokens: 64
+data_augmentation: True
+label_to_int_mapping_path: label_int_mappings/label_int_mapping_TrInF.json
+

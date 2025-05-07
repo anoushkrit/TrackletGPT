@@ -7,7 +7,7 @@ dataset:
     train:
       {
         _base_: cfgs/dataset_configs/tracklet.yaml,
-        others: { subset: "testset", npoints: 256 },
+        others: { subset: "trainset", npoints: 256 },
       },
     val:
       {
@@ -36,11 +36,11 @@ model:
         mask_type: "rand",
         trans_dim: 256,
         encoder_dims: 256,
-        depth: 9,
+        depth: 8,
         drop_path_rate: 0.1,
         num_heads: 4,
         decoder_depth: 4,
-        decoder_num_heads: 6,
+        decoder_num_heads: 4,
       },
     is_tracklet: True,
     pos_abs_relative: True,

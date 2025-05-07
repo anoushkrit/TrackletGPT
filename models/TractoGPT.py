@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import timm, os
 from torch.autograd import Variable
-from timm.models.layers import DropPath, trunc_normal_
+from timm.layers import DropPath, trunc_normal_
 import numpy as np
 from .build import MODELS
 from utils import misc
@@ -144,6 +144,40 @@ class Encoder_small(nn.Module):  # Embedding module
             nn.BatchNorm1d(512),
             nn.ReLU(inplace=True),
             nn.Conv1d(512, self.encoder_channel, 1)
+        )
+
+    def forward(self, point_groups):
+        '''
+            point_groups : B G N 3
+            -----------------
+            feature_global : B G C
+        '''
+        bs, g, n, _ = point_groups.shape
+        point_groups = point_groups.reshape(bs * g, n, 3)
+        # encoder
+        feature = self.first_conv(point_groups.transpose(2, 1))
+        feature_global = torch.max(feature, dim=2, keepdim=True)[0]
+        feature = torch.cat(
+            [feature_global.expand(-1, -1, n), feature], dim=1)
+        feature = self.second_conv(feature)
+        feature_global = torch.max(feature, dim=2, keepdim=False)[0]
+        return feature_global.reshape(bs, g, self.encoder_channel)
+    
+class Encoder_nano(nn.Module):  # Embedding module
+    def __init__(self, encoder_channel):
+        super().__init__()
+        self.encoder_channel = encoder_channel
+        self.first_conv = nn.Sequential(
+            nn.Conv1d(3, 32, 1),
+            nn.BatchNorm1d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(32, 64, 1)
+        )
+        self.second_conv = nn.Sequential(
+            nn.Conv1d(128, 128, 1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(128, self.encoder_channel, 1)
         )
 
     def forward(self, point_groups):
@@ -373,11 +407,13 @@ class GPT_Transformer(nn.Module):
         self.is_tracklet_pc = config.get('is_tracklet_pc', False)
         self.pos_abs_relative = config.get('pos_abs_rel', False)
 
-        assert self.encoder_dims in [128, 256, 384, 768, 1024]
-        if self.encoder_dims <= 384:
-            self.encoder = Encoder_small(encoder_channel=self.encoder_dims)
-        else:
-            self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
+        # assert self.encoder_dims in [128, 256, 384, 768, 1024]
+        # if self.encoder_dims <=256:
+        self.encoder = Encoder_nano(encoder_channel=self.encoder_dims)
+        # elif self.encoder_dims <= 384:
+        #     self.encoder = Encoder_small(encoder_channel=self.encoder_dims)
+        # else:
+        #     self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
 
         if self.graph_config is not None:
             self.graph_encoder = GAT(self.graph_config)
@@ -471,8 +507,9 @@ class GPT_Transformer(nn.Module):
         pos_absolute = torch.cat([sos_pos, pos_absolute], dim=1)
 
         # add pos absolute and pos relative to the input tokens
-        if self.pos_abs_relative:
-            pos_absolute[:, 1:] = pos_absolute[:, 1:] + pos_relative[:,1:]            
+        # if self.pos_abs_relative:
+        #     # pos_absolute[:, 1:] = pos_absolute[:, 1:] + pos_relative[:,1:]            
+        #     pos_absolute[:, 1:] = pos_relative[:,1:]            
 
         # mask for dual masking (casual + random)
         attn_mask = torch.full(
@@ -710,11 +747,11 @@ class PointTransformer(nn.Module):
         if self.graph_config is not None:
             self.graph_encoder = GAT(self.graph_config)
 
-        assert self.encoder_dims in [128, 256, 384, 768, 1024]
-        if self.encoder_dims <= 384:
-            self.encoder = Encoder_small(encoder_channel=self.encoder_dims)
-        else:
-            self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
+        # assert self.encoder_dims in [128, 256, 384, 768, 1024]
+        # if self.encoder_dims <= 384:
+        self.encoder = Encoder_nano(encoder_channel=self.encoder_dims)
+        # else:
+        #     self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
 
         self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
         if self.is_center_aware:
@@ -947,8 +984,9 @@ class PointTransformer(nn.Module):
         pos_relative = self.pos_embed(position)
 
         # add pos absolute and pos relative to the input tokens
-        if self.pos_abs_relative:
-            pos[:, 1:-1] = pos[:, 1:-1] + pos_relative[:, 1:]            
+        # if self.pos_abs_relative:
+        #     # pos[:, 1:-1] = pos[:, 1:-1] + pos_relative[:, 1:]            
+        #     pos[:, 1:-1] = pos_relative[:, 1:]            
         
         x = torch.cat((cls_tokens, group_input_tokens), dim=1)
         pos = torch.cat((cls_pos, pos), dim=1)
