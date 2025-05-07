@@ -1,7 +1,7 @@
 NAME: Tracklet
 # data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/dMRI_data/105HCP
-data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives
-# data_dir: /s3/DATA/TractoInferno/derivatives
+# data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives
+data_dir: /s3/DATA/TractoInferno/derivatives
 # dataset: 105HCP
 dataset: TractoInferno
 

@@ -7,7 +7,7 @@ dataset:
     train:
       {
         _base_: cfgs/dataset_configs/simply_tracklet.yaml,
-        others: { subset: "testset", npoints: 256 },
+        others: { subset: "trainset", npoints: 256 },
       },
     val:
       {
