@@ -30,7 +30,7 @@ if [[ -z "$ckpts" || -z "$config" ]]; then
     exit 1
 fi
 
-conda activate TractoBERT
+conda activate trackletgpt
 
 # Path to your config file read from --config argument yaml file
 dataset_config_file=$(python -c "
@@ -112,7 +112,7 @@ do
     echo "${subject_blocks[$i]}"
 
     conda deactivate
-    conda activate TractoBERT
+    conda activate trackletgpt
     eval $base_model_command
     wait
     conda deactivate
@@ -127,5 +127,6 @@ do
 done
 
 conda deactivate
-conda activate TractoBERT
+conda activate trackletgpt
 eval $avg_calc_command
+eval $avg_accumulation_command

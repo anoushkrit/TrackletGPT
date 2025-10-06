@@ -89,7 +89,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # output_path
-    output_dir = f'predictions_new/{args.exp_subset}/{args.model}/{args.dataset_name}/test_{args.exp_name}/results'
+    output_dir = f'predictions_encodernano/{args.exp_subset}/{args.model}/{args.dataset_name}/test_{args.exp_name}/results'
 
     # list csv files
     csv_files = [f for f in os.listdir(output_dir) if f.endswith('.csv')]
@@ -114,5 +114,9 @@ if __name__ == '__main__':
         
     # calculating weighted average for all csv files
     for csv_file in csv_files_path:
-        df = calculate_weighted_average(csv_file, supports)
-        df.to_csv(csv_file, index=False)
+        try:
+            df = calculate_weighted_average(csv_file, supports)
+            df.to_csv(csv_file, index=False)
+        except:
+            print(f"Error in calculating weighted average for {csv_file}")
+            continue

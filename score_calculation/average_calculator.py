@@ -63,8 +63,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # output_path
-    path = f'predictions_new/{args.exp_subset}/{args.model}/{args.dataset_name}/test_{args.exp_name}/results'
-    # path = 'predictions_new/105HCP/TractoGPT-M/Tracklet_Sentence/test_7_from_12_threshold_7/results'
+    path = f'predictions_encodernano/{args.exp_subset}/{args.model}/{args.dataset_name}/test_{args.exp_name}/results'
+    # path = 'predictions_encodernano/105HCP/TractoGPT-M/Tracklet_Sentence/test_7_from_12_threshold_7/results'
 
     metric_order = ['dice', 'overlap', 'overreach', 'precesion', 'recall', 'f1']
     # Read all the csv files

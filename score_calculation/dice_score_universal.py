@@ -55,8 +55,8 @@ def calculate_hcp_scores_subject(args):
     if len(unique_labels) == 0:
         return (sub, {})
     if 'sub' in sub:
-        # tractogram = load_tractogram(f"/scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives/testset/{sub}/tractography/{sub}__{int_label_mapping[unique_labels[0]]}.trk", "same", bbox_valid_check=False)
-        tractogram = load_tractogram(f"/s3/DATA/TractoInferno/derivatives/testset/{sub}/tractography/{sub}__{int_label_mapping[unique_labels[0]]}.trk", "same", bbox_valid_check=False)
+        tractogram = load_tractogram(f"/scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives/testset/{sub}/tractography/{sub}__{int_label_mapping[unique_labels[0]]}.trk", "same", bbox_valid_check=False)
+        # tractogram = load_tractogram(f"/s3/DATA/TractoInferno/derivatives/testset/{sub}/tractography/{sub}__{int_label_mapping[unique_labels[0]]}.trk", "same", bbox_valid_check=False)
     else:
         tractogram = load_tractogram(f"/scratch/anoushkrit.scee.iitmandi/DATA/dMRI_data/105HCP/test/{sub}/tracts/{int_label_mapping[unique_labels[0]]}.trk", "same", bbox_valid_check=False)
     dic = {}
@@ -179,8 +179,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # print(args.model, args.exp_name, args.dataset_name, args.mapping_path)
-    pickle_path = f'predictions_new/{args.exp_subset}/{args.model}/{args.dataset_name}/test_{args.exp_name}/pkls/test_pred__{args.model}.pkl'
-    output_path = f'predictions_new/{args.exp_subset}/{args.model}/{args.dataset_name}/test_{args.exp_name}/results/test_pred__{args.model}.json'
+    pickle_path = f'predictions_encodernano/{args.exp_subset}/{args.model}/{args.dataset_name}/test_{args.exp_name}/pkls/test_pred__{args.model}.pkl'
+    output_path = f'predictions_encodernano/{args.exp_subset}/{args.model}/{args.dataset_name}/test_{args.exp_name}/results/test_pred__{args.model}.json'
     json_dice = calculate_hcp_scores(pickle_path, args.mapping_path, output_path, args.dataset_name)
     # with open (output_path, 'r') as f:
     #     json_dice = json.load(f)

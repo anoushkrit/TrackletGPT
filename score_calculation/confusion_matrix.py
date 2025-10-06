@@ -55,7 +55,7 @@ def plot_confusion_matrix(y_true, y_pred, filename='confusion_matrix.png'):
 
 if __name__ == '__main__':
 
-    true_pred_dir = 'predictions_new/TractoInferno/TractoGPT-M/Tracklet_Sentence/test_7_from12_threshold_7/results/true_pred_labels'
+    true_pred_dir = 'predictions_encodernano/TractoInferno/TractoGPT-M/Tracklet_Sentence/test_7_from12_threshold_7/results/true_pred_labels'
     true_pred_files = os.listdir(true_pred_dir)
 
 
