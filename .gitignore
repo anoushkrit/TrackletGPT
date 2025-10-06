@@ -178,3 +178,6 @@ experiment*/
 
 # pkls
 *.pkl
+
+# trks
+*.trk

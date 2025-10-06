@@ -15,7 +15,6 @@ from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
 from models.GPT import GPT_extractor, GPT_generator
 import math
 from models.z_order import *
-import similaritymeasures
 import pickle
 from models.encoder import GAT, LSTMencoder
 
@@ -168,16 +167,16 @@ class Encoder_nano(nn.Module):  # Embedding module
         super().__init__()
         self.encoder_channel = encoder_channel
         self.first_conv = nn.Sequential(
-            nn.Conv1d(3, 32, 1),
-            nn.BatchNorm1d(32),
+            nn.Conv1d(3, 64, 1),
+            nn.BatchNorm1d(64),
             nn.ReLU(inplace=True),
-            nn.Conv1d(32, 64, 1)
+            nn.Conv1d(64, 128, 1)
         )
         self.second_conv = nn.Sequential(
-            nn.Conv1d(128, 128, 1),
-            nn.BatchNorm1d(128),
+            nn.Conv1d(256, 256, 1),
+            nn.BatchNorm1d(256),
             nn.ReLU(inplace=True),
-            nn.Conv1d(128, self.encoder_channel, 1)
+            nn.Conv1d(256, self.encoder_channel, 1)
         )
 
     def forward(self, point_groups):
@@ -408,12 +407,12 @@ class GPT_Transformer(nn.Module):
         self.pos_abs_relative = config.get('pos_abs_rel', False)
 
         # assert self.encoder_dims in [128, 256, 384, 768, 1024]
-        # if self.encoder_dims <=256:
-        self.encoder = Encoder_nano(encoder_channel=self.encoder_dims)
-        # elif self.encoder_dims <= 384:
-        #     self.encoder = Encoder_small(encoder_channel=self.encoder_dims)
-        # else:
-        #     self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
+        if self.encoder_dims <=256:
+            self.encoder = Encoder_nano(encoder_channel=self.encoder_dims)
+        elif self.encoder_dims <= 384:
+            self.encoder = Encoder_small(encoder_channel=self.encoder_dims)
+        else:
+            self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
 
         if self.graph_config is not None:
             self.graph_encoder = GAT(self.graph_config)
@@ -432,7 +431,7 @@ class GPT_Transformer(nn.Module):
             trans_dim=self.trans_dim,
             group_size=self.group_size,
             pretrained=True,
-            multi_class_classification=config.streamline_patch,
+            multi_class_classification=config.get('streamline_patch', False),
         )
 
         self.generator_blocks = GPT_generator(
@@ -444,9 +443,7 @@ class GPT_Transformer(nn.Module):
         )
 
         # do not perform additional mask on the first (self.keep_attend) tokens
-        self.keep_attend = 10
-        if config.keep_attend is not None:
-            self.keep_attend = config.keep_attend
+        self.keep_attend = config.get('keep_attend', 10)
         
         self.num_groups = config.num_group
         self.num_mask = int(
@@ -479,8 +476,7 @@ class GPT_Transformer(nn.Module):
             raise ValueError('center_aware is None in center_aware mode')
         
         # generate mask
-        # group_input_tokens = self.encoder(neighborhood)  # B G C
-        group_input_tokens = self.encoder(neighborhood-center.unsqueeze(2))  # B G C
+        group_input_tokens = self.encoder(neighborhood)  # B G C
         if self.graph_config is not None:
             group_input_tokens = self.graph_encoder(group_input_tokens)
             group_input_tokens = group_input_tokens.view(B, self.num_groups, -1)
@@ -505,11 +501,6 @@ class GPT_Transformer(nn.Module):
         sos_pos = self.sos_pos.expand(batch_size, -1, -1)
         pos_absolute = self.pos_embed(center[:, :-1, :])
         pos_absolute = torch.cat([sos_pos, pos_absolute], dim=1)
-
-        # add pos absolute and pos relative to the input tokens
-        # if self.pos_abs_relative:
-        #     # pos_absolute[:, 1:] = pos_absolute[:, 1:] + pos_relative[:,1:]            
-        #     pos_absolute[:, 1:] = pos_relative[:,1:]            
 
         # mask for dual masking (casual + random)
         attn_mask = torch.full(
@@ -618,19 +609,19 @@ class TractoGPT(nn.Module):
         self.loss_func_c = nn.MSELoss().cuda()
 
     def forward(self, pts, vis=False, **kwargs):
-        if self.is_tracklet_sentence:
+        if self.is_tracklet_sentence: # neighborhood are not normalized with respect to center in this case
             neighborhood = pts['tokens']
             center = pts['center']
             padding = pts['padding']
             EOS_idxs = pts['EOS_idxs']
+            neighborhood = neighborhood - center.unsqueeze(2)
 
             center_aware = None
         elif self.is_tracklet: # neighborhood are not normalized with respect to center in this case
             neighborhood = pts['tokens']
             center = pts['center']
             padding = pts['padding']
-            if self.graph_config is None and self.lstm_config is None:
-                neighborhood = neighborhood - center.unsqueeze(2)
+            neighborhood = neighborhood - center.unsqueeze(2)
 
             EOS_idxs = center_aware = None
         elif self.config.streamline_patch:
@@ -674,10 +665,6 @@ class TractoGPT(nn.Module):
             neighborhood, center = self.group_divider(pts)
             padding = EOS_idxs = center_aware = None
 
-        # print('nan in neighborhood', torch.isnan(neighborhood).any())
-        # print('nan in center', torch.isnan(center).any())
-        # print('nan in padding', torch.isnan(padding).any())
-        # print(neighborhood.shape, center.shape, padding.shape)
         B = neighborhood.shape[0]
 
         generated_points, considered_tokens = self.GPT_Transformer(
@@ -705,7 +692,6 @@ class TractoGPT(nn.Module):
 
             return generated_points, gt_points, center
 
-        # print(loss1, loss2)
         return loss1 + loss2
 
 
@@ -907,13 +893,19 @@ class PointTransformer(nn.Module):
     
     
     def forward(self, pts):
-        if self.is_tracklet:
+        if self.is_tracklet: # neighborhood are not normalized with respect to center in this case
             neighborhood = pts['tokens']
             center = pts['center']
             padding = pts['padding']
-            if self.graph_config is None and self.lstm_config is None:
-                neighborhood = neighborhood - center.unsqueeze(2)
+            neighborhood = neighborhood - center.unsqueeze(2)
             EOS_idxs = center_aware = None
+        elif self.is_tracklet_sentence: # neighborhood are not normalized with respect to center in this case
+            neighborhood = pts['tokens']
+            center = pts['center']
+            padding = pts['padding']
+            EOS_idxs = pts['EOS_idxs']
+            neighborhood = neighborhood - center.unsqueeze(2)
+            center_aware = None
         elif self.config.streamline_patch:
             B = pts['streamlines'].shape[0]
             neighborhood = pts['streamlines']
@@ -983,11 +975,6 @@ class PointTransformer(nn.Module):
             [center[:, 0, :].unsqueeze(1), relative_direction], dim=1)
         pos_relative = self.pos_embed(position)
 
-        # add pos absolute and pos relative to the input tokens
-        # if self.pos_abs_relative:
-        #     # pos[:, 1:-1] = pos[:, 1:-1] + pos_relative[:, 1:]            
-        #     pos[:, 1:-1] = pos_relative[:, 1:]            
-        
         x = torch.cat((cls_tokens, group_input_tokens), dim=1)
         pos = torch.cat((cls_pos, pos), dim=1)
 

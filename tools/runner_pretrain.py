@@ -125,24 +125,11 @@ def run_net(args, config, train_writer=None, val_writer=None):
             n_itr = epoch * n_batches + idx
 
             data_time.update(time.time() - batch_start_time)
-            # npoints = config.dataset.train.others.npoints
-            dataset_name = config.dataset.train._base_.NAME
-
-            # if dataset_name == 'Tracklet_Sentence':
-            #     for keys in data.keys():
-            #         data[keys] = data[keys].cuda()
-            #     points = data
-            # else:
-            #     points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
             for keys in data.keys():
                 data[keys] = data[keys].cuda()
             points = data
             
-
-            # assert points.size(1) == npoints
-            # points = train_transforms(points)
             loss = base_model(points)
-            # time.sleep(2)
 
             loss.backward()
 

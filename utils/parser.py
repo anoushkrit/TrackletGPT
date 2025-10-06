@@ -15,6 +15,7 @@ def get_args():
         help='job launcher')     
     parser.add_argument('--local_rank', type=int, default=0)
     parser.add_argument('--num_workers', type=int, default=8)
+    parser.add_argument('--pin_memory', action='store_true', default=True, help='pin memory for dataloader')
     # seed 
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument(
@@ -106,9 +107,9 @@ def get_args():
 
 def create_experiment_dir(args):
     if not os.path.exists(args.experiment_path):
-        os.makedirs(args.experiment_path)
+        os.makedirs(args.experiment_path, exist_ok=True)
         print('Create experiment path successfully at %s' % args.experiment_path)
     if not os.path.exists(args.tfboard_path):
-        os.makedirs(args.tfboard_path)
+        os.makedirs(args.tfboard_path, exist_ok=True)
         print('Create TFBoard path successfully at %s' % args.tfboard_path)
 

@@ -33,7 +33,7 @@ def main():
     logger = get_root_logger(log_file=log_file, name=args.log_name)
     # define the tensorboard writer
     if not args.test:
-        if args.local_rank == 0:
+        if not args.distributed or torch.distributed.get_rank() == 0:
             train_writer = SummaryWriter(
                 os.path.join(args.tfboard_path, 'train'))
             val_writer = SummaryWriter(os.path.join(args.tfboard_path, 'test'))
@@ -72,7 +72,18 @@ def main():
         misc.set_random_seed(args.seed + args.local_rank,
                              deterministic=args.deterministic)
     if args.distributed:
-        assert args.local_rank == torch.distributed.get_rank()
+        global_rank = torch.distributed.get_rank()
+        local_rank = int(os.environ["LOCAL_RANK"])  # comes from torchrun
+        world_size = torch.distributed.get_world_size()
+
+        # set the correct GPU device for this process
+        torch.cuda.set_device(local_rank)
+
+        if global_rank == 0:
+            print_log(f"[Rank {global_rank}] Master process initialized "
+                f"(world size: {world_size})", logger="main")
+        else:
+            print_log(f"[Rank {global_rank}] Worker process initialized on GPU {local_rank}", logger="main")
 
     if args.shot != -1:
         config.dataset.train.others.shot = args.shot

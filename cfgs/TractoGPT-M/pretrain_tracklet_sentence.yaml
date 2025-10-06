@@ -6,17 +6,17 @@ dataset:
   {
     train:
       {
-        _base_: cfgs/dataset_configs/tracklet_sentence.yaml,
+        _base_: cfgs/dataset_configs/tracklet.yaml,
         others: { subset: "trainset", npoints: 256 },
       },
     val:
       {
-        _base_: cfgs/dataset_configs/tracklet_sentence.yaml,
+        _base_: cfgs/dataset_configs/tracklet.yaml,
         others: { subset: "validset", npoints: 256 },
       },
     test:
       {
-        _base_: cfgs/dataset_configs/tracklet_sentence.yaml,
+        _base_: cfgs/dataset_configs/tracklet.yaml,
         others: { subset: "testset", npoints: 256 },
       },
   }
@@ -26,7 +26,7 @@ model:
     NAME: TractoGPT,
     cls_dim: 32,
     group_size: 12,
-    num_group: 256,
+    num_group: 32,
     loss: cdl12,
     weight_center: 1,
     keep_attend: 7,
@@ -43,12 +43,9 @@ model:
         decoder_num_heads: 4,
       },
     is_tracklet: True,
-    pos_abs_relative: True,
-    streamline_patch: False,
-    is_tracklet_pc: False,    
   }
 
 npoints: 256
-total_bs: 128  # bs==1 when using custom batch created using dataloader
+total_bs: 512  # bs==1 when using custom batch created using dataloader
 step_per_update: 1
 max_epoch: 300

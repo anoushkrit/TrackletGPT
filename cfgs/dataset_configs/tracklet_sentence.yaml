@@ -1,22 +1,13 @@
-NAME: Tracklet_Sentence
-data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/dMRI_data/105HCP
+NAME: Tracklet
+# data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/dMRI_data/105HCP
 # data_dir: /scratch/anoushkrit.scee.iitmandi/DATA/TractoInferno/derivatives
-# data_dir: /s3/DATA/TractoInferno/derivatives
-# data_dir: /storage/anoushkrit/DATA/TractoInferno/derivatives
-qbx_save_path: ./data/qbx
-# subset: "trainset"
-# dataset: TractoInferno
-dataset: 105HCP
+data_dir: /s3/DATA/TractoInferno/derivatives
+# dataset: 105HCP
+dataset: TractoInferno
 
 sample_per_subject: 10000
-samples_per_class: 300
-max_num_tokens: 256
+samples_per_class: 1000
+data_transformation: False
+label_to_int_mapping_path: label_int_mappings/label_int_mapping_TrInF.json
 
-threshold: 7
-max_total_neighbours_count: 12
-considered_neighbours_count: 7
-
-# label_to_int_mapping_path: label_int_mappings/label_int_mapping_TrInF.json
-label_to_int_mapping_path: label_int_mappings/label_int_mapping_105HCP.json
-
-EOS_token: False
+max_num_tokens: 32

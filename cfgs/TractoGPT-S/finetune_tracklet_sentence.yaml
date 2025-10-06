@@ -6,17 +6,17 @@ dataset:
   {
     train:
       {
-        _base_: cfgs/dataset_configs/tracklet_sentence.yaml,
-        others: { subset: "train" },
+        _base_: cfgs/dataset_configs/tracklet.yaml,
+        others: { subset: "trainset" },
       },
     val:
       {
-        _base_: cfgs/dataset_configs/tracklet_sentence.yaml,
-        others: { subset: "val" },
+        _base_: cfgs/dataset_configs/tracklet.yaml,
+        others: { subset: "validset" },
       },
     test:
       {
-        _base_: cfgs/dataset_configs/tracklet_sentence.yaml,
+        _base_: cfgs/dataset_configs/tracklet.yaml,
         others: { subset: "testset" },
       },
   }
@@ -26,19 +26,17 @@ model:
     trans_dim: 384,
     depth: 12,
     drop_path_rate: 0.1,
-    cls_dim: 71,
+    cls_dim: 32,
     num_heads: 6,
     group_size: 12,
-    num_group: 256,
+    num_group: 32,
     encoder_dims: 384,
     decoder_depth: 4,
     is_tracklet: True,
-    triplet_loss: False,
-
   }
 
-npoints: 1024
-total_bs: 128
+npoints: 256
+total_bs: 512
 step_per_update: 1
-max_epoch: 300
+max_epoch: 100
 grad_norm_clip: 10

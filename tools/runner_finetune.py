@@ -60,7 +60,6 @@ def run_net(args, config, train_writer=None, val_writer=None):
     logger = get_logger(args.log_name)
 
     # build dataset
-    config.dataset.val.others.bs = 256
     config.dataset.train._base_.num_workers = args.num_workers
     config.dataset.val._base_.num_workers = args.num_workers
     (train_sampler, train_dataloader), (_, test_dataloader), = builder.dataset_builder(args, config.dataset.train), \
@@ -124,64 +123,19 @@ def run_net(args, config, train_writer=None, val_writer=None):
         base_model.train()  # set model to training mode
         n_batches = len(train_dataloader)
 
-        npoints = config.npoints
         for idx, (taxonomy_ids, extra_info, data) in enumerate(train_dataloader):
             num_iter += 1
             n_itr = epoch * n_batches + idx
 
-            dataset_name = config.dataset.train._base_.NAME
             data_time.update(time.time() - batch_start_time)
             
-            # if config.total_bs > 1:
-            #     points = (data[0].cuda(), data[1].cuda(), data[2].cuda())
-            #     label = taxonomy_ids.cuda()
-            # elif 'goback_3L' in dataset_name or 'single_streamline' in dataset_name:
-            #     points = data.squeeze().cuda()
-            #     label = taxonomy_ids.squeeze().cuda()
-            # else:
-            #     points = data[0].cuda()
-            #     label = data[1].cuda()
             for key in data.keys():
                 data[key] = data[key].cuda()
             points = data
             label = taxonomy_ids.cuda()
 
-            # print(points.shape)
-            if npoints == 1024:
-                point_all = 1200
-            elif npoints == 2048:
-                point_all = 2400
-            elif npoints == 4096:
-                point_all = 4800
-            elif npoints == 8192:
-                point_all = 8192
-            else:
-                point_all = npoints
-                # raise NotImplementedError()
-
-            # if points.size(1) < point_all:
-            #     point_all = points.size(1)
-
-            # fps_idx = pointnet2_utils.furthest_point_sample(
-            #     points, point_all)  # (B, npoint)
-
-            # fps_idx = fps_idx[:, np.random.choice(point_all, npoints, False)]
-            # points = pointnet2_utils.gather_operation(points.transpose(
-            #     1, 2).contiguous(), fps_idx).transpose(1, 2).contiguous()  # (B, N, 3)
-            # import pdb; pdb.set_trace()
-            # points = train_transforms(points)
-
-            # if dataset_name == 'streamPC':
-            #     mainS = train_transforms(mainS)
-            #     ret, loss1, class_feat, _ = base_model((mainS, points))
-            # elif dataset_name == 's3FSSknnLRC':
-            #     ret, loss1, class_feat, LRC_feat = base_model(points)
-            # else:
             ret, loss1, class_feat = base_model(points)
             
-            # if dataset_name == 's3FSSknnLRC':
-            #     loss, acc = base_model.module.get_loss_acc(ret, label, class_feat, LRC_feat, LRC_label)
-            # else:
             loss, acc = base_model.module.get_loss_acc(ret, label, class_feat)
 
             _loss = loss + 3 * loss1
