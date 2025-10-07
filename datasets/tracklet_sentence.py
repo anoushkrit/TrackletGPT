@@ -191,10 +191,7 @@ class Tracklet(Dataset):
             subject_data_ = [(subject, data_path, datasets[i], self.sample_per_subject, self.samples_per_class)
                              for subject in subjects_]
             subject_data.extend(subject_data_)
-        
-        
-        # select first 10 subjects
-        subject_data = subject_data[:10]
+
         # Using multiprocessing to parallelize the loading of streamlines
         with Pool(processes=self.num_workers) as pool:
             results = list(tqdm(pool.imap(self.load_subject, subject_data), total=len(subject_data), desc='Loading Streamlines'))
