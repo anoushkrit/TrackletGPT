@@ -90,8 +90,11 @@ def get_args():
         print(
             'training from scratch')
 
-    if 'LOCAL_RANK' not in os.environ:
+    if 'LOCAL_RANK' not in os.environ and hasattr(args, 'local_rank'):
         os.environ['LOCAL_RANK'] = str(args.local_rank)
+    
+    if 'LOCAL_RANK' in os.environ:
+        args.local_rank = int(os.environ['LOCAL_RANK'])
 
     if args.test:
         args.exp_name = 'test_' + args.exp_name

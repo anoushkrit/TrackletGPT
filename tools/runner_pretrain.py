@@ -66,7 +66,8 @@ def run_net(args, config, train_writer=None, val_writer=None):
     # build model
     base_model = builder.model_builder(config.model)
     if args.use_gpu:
-        base_model.to(args.local_rank)
+        device = torch.device(f'cuda:{args.local_rank}')
+        base_model = base_model.to(device)
 
     # from IPython import embed; embed()
 
@@ -91,11 +92,11 @@ def run_net(args, config, train_writer=None, val_writer=None):
                 base_model)
             print_log('Using Synchronized BatchNorm ...', logger=logger)
         base_model = nn.parallel.DistributedDataParallel(base_model, device_ids=[
-                                                         args.local_rank], find_unused_parameters=True)
+                                                         args.local_rank % torch.cuda.device_count()], find_unused_parameters=True)
         print_log('Using Distributed Data parallel ...', logger=logger)
     else:
         print_log('Using Data parallel ...', logger=logger)
-        base_model = nn.DataParallel(base_model).to(args.local_rank)
+        base_model = nn.DataParallel(base_model).to(device)
     # optimizer & scheduler
     optimizer, scheduler = builder.build_opti_sche(base_model, config)
 
@@ -126,7 +127,7 @@ def run_net(args, config, train_writer=None, val_writer=None):
 
             data_time.update(time.time() - batch_start_time)
             for keys in data.keys():
-                data[keys] = data[keys].to(args.local_rank)
+                data[keys] = data[keys].to(device)
             points = data
             
             loss = base_model(points)
