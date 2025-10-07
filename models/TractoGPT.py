@@ -10,13 +10,13 @@ from utils import misc
 from utils.checkpoint import get_missing_parameters_message, get_unexpected_parameters_message
 from utils.logger import *
 import plotly.graph_objects as go
-from knn_cuda import KNN
+# from knn_cuda import KNN
 from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
 from models.GPT import GPT_extractor, GPT_generator
 import math
 from models.z_order import *
 import pickle
-from models.encoder import GAT, LSTMencoder
+# from models.encoder import GAT, LSTMencoder
 
 class STN3d(nn.Module):
     def __init__(self, channel):
@@ -469,6 +469,7 @@ class GPT_Transformer(nn.Module):
 
     def forward(self, neighborhood, center, center_aware=None, padding=None, EOS_idxs=None, noaug=False, classify=False):
         B, _, _, _ = neighborhood.size()
+        device = neighborhood.device
         # error handling
         if (self.is_tracklet or self.is_tracklet_pc) and padding is None:
             raise ValueError('padding is None in tracklet mode')
@@ -521,18 +522,18 @@ class GPT_Transformer(nn.Module):
                 overall_mask,
             ])
             overall_mask = torch.from_numpy(
-                overall_mask).to(torch.bool).to('cuda')
+                overall_mask).to(torch.bool).to(device)
 
-            eye_mask = torch.eye(self.num_groups).to(torch.bool).to('cuda')
+            eye_mask = torch.eye(self.num_groups).to(torch.bool).to(device)
 
             attn_mask = attn_mask | overall_mask.unsqueeze(0) & ~eye_mask
 
             # key_padding_mask to handle the padding
             key_padding_mask = None
-            considered_tokens = torch.full((batch_size, seq_len), True).to(torch.bool).to('cuda')
+            considered_tokens = torch.full((batch_size, seq_len), True).to(torch.bool).to(device)
             if padding is not None and not self.is_tracklet_pc:
                 # create the key_padding_mask
-                key_padding_mask = torch.arange(seq_len).expand(batch_size, seq_len).to('cuda') >= padding.unsqueeze(1)
+                key_padding_mask = torch.arange(seq_len).expand(batch_size, seq_len).to(device) >= padding.unsqueeze(1)
                 key_padding_mask = key_padding_mask.to(torch.bool)
                 considered_tokens = ~key_padding_mask
 
@@ -585,28 +586,30 @@ class TractoGPT(nn.Module):
         self.is_tracklet_pc = config.get('is_tracklet_pc', False)
         print_log(
             f'[TractoGPT] divide point cloud into G{self.num_group} x S{self.group_size} points ...', logger='TractoGPT')
-        if self.is_tracklet_pc:
-            self.group_divider = Group(
-                num_group=self.config.num_groups_for_pc, group_size=self.group_size)
-        else:
-            self.group_divider = Group(
-                num_group=self.num_group, group_size=self.group_size)
+        # if self.is_tracklet_pc:
+        #     self.group_divider = Group(
+        #         num_group=self.config.num_groups_for_pc, group_size=self.group_size)
+        # else:
+        #     self.group_divider = Group(
+        #         num_group=self.num_group, group_size=self.group_size)
 
         self.loss = config.loss
 
         self.build_loss_func(self.loss)
 
     def build_loss_func(self, loss_type):
+        # Use device of model parameters for loss functions
+        device = next(self.parameters()).device
         if loss_type == "cdl1":
-            self.loss_func_p = ChamferDistanceL1().cuda()
+            self.loss_func_p = ChamferDistanceL1().to(device)
         elif loss_type == 'cdl2':
-            self.loss_func_p = ChamferDistanceL2().cuda()
+            self.loss_func_p = ChamferDistanceL2().to(device)
         elif loss_type == 'cdl12':
-            self.loss_func_p1 = ChamferDistanceL1().cuda()
-            self.loss_func_p2 = ChamferDistanceL2().cuda()
+            self.loss_func_p1 = ChamferDistanceL1().to(device)
+            self.loss_func_p2 = ChamferDistanceL2().to(device)
         else:
             raise NotImplementedError
-        self.loss_func_c = nn.MSELoss().cuda()
+        self.loss_func_c = nn.MSELoss().to(device)
 
     def forward(self, pts, vis=False, **kwargs):
         if self.is_tracklet_sentence: # neighborhood are not normalized with respect to center in this case
@@ -722,16 +725,16 @@ class PointTransformer(nn.Module):
         self.is_tracklet_pc = config.get('is_tracklet_pc', False)
         self.pos_abs_relative = config.get('pos_abs_relative', False)
 
-        if self.is_tracklet_pc:
-            self.group_divider = Group(
-                num_group=self.config.num_groups_for_pc, group_size=self.group_size)
-        else:
-            self.group_divider = Group(
-                num_group=self.num_group, group_size=self.group_size)
-        if self.lstm_config is not None:
-            self.LSTMencoder = LSTMencoder(self.lstm_config)
-        if self.graph_config is not None:
-            self.graph_encoder = GAT(self.graph_config)
+        # if self.is_tracklet_pc:
+        #     self.group_divider = Group(
+        #         num_group=self.config.num_groups_for_pc, group_size=self.group_size)
+        # else:
+        #     self.group_divider = Group(
+        #         num_group=self.num_group, group_size=self.group_size)
+        # if self.lstm_config is not None:
+        #     self.LSTMencoder = LSTMencoder(self.lstm_config)
+        # if self.graph_config is not None:
+        #     self.graph_encoder = GAT(self.graph_config)
 
         # assert self.encoder_dims in [128, 256, 384, 768, 1024]
         # if self.encoder_dims <= 384:
@@ -777,14 +780,16 @@ class PointTransformer(nn.Module):
         trunc_normal_(self.cls_pos, std=.02)
 
     def build_loss_func(self, loss_type='cdl12'):
+        # Use device of model parameters for loss functions
+        device = next(self.parameters()).device
         self.loss_ce = nn.CrossEntropyLoss()
         if loss_type == "cdl1":
-            self.loss_func_p = ChamferDistanceL1().cuda()
+            self.loss_func_p = ChamferDistanceL1().to(device)
         elif loss_type == 'cdl2':
-            self.loss_func_p = ChamferDistanceL2().cuda()
+            self.loss_func_p = ChamferDistanceL2().to(device)
         elif loss_type == 'cdl12':
-            self.loss_func_p1 = ChamferDistanceL1().cuda()
-            self.loss_func_p2 = ChamferDistanceL2().cuda()
+            self.loss_func_p1 = ChamferDistanceL1().to(device)
+            self.loss_func_p2 = ChamferDistanceL2().to(device)
             print('cdl12')
         else:
             raise NotImplementedError
@@ -946,6 +951,7 @@ class PointTransformer(nn.Module):
         else:
             neighborhood, center = self.group_divider(pts)
             padding = center_aware = EOS_idxs = None
+        device = neighborhood.device
         
         # encoding tokens using mini pointnet
 
@@ -992,7 +998,7 @@ class PointTransformer(nn.Module):
             # modifying pos
             pos[key_padding_mask] = 0
         elif padding is not None and self.is_tracklet_pc:
-            key_padding_mask = torch.concatenate((torch.full((B, 2), False).to(torch.bool).to('cuda'), padding), dim=1)
+            key_padding_mask = torch.concatenate((torch.full((B, 2), False).to(torch.bool).to(device), padding), dim=1)
             pos[key_padding_mask] = 0
 
         # transformer

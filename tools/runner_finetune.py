@@ -9,7 +9,7 @@ from utils.AverageMeter import AverageMeter
 import pickle
 import numpy as np
 from datasets import data_transforms
-from pointnet2_ops import pointnet2_utils
+# from pointnet2_ops import pointnet2_utils
 from torchvision import transforms
 import os
 
@@ -95,11 +95,11 @@ def run_net(args, config, train_writer=None, val_writer=None):
                 base_model)
             print_log('Using Synchronized BatchNorm ...', logger=logger)
         base_model = nn.parallel.DistributedDataParallel(
-            base_model, device_ids=[args.local_rank % torch.cuda.device_count()])
+            base_model, device_ids=[args.local_rank])
         print_log('Using Distributed Data parallel ...', logger=logger)
     else:
         print_log('Using Data parallel ...', logger=logger)
-        base_model = nn.DataParallel(base_model).cuda()
+        base_model = nn.DataParallel(base_model).to(args.local_rank)
     # optimizer & scheduler
     optimizer, scheduler = builder.build_opti_sche(base_model, config)
 
@@ -130,9 +130,9 @@ def run_net(args, config, train_writer=None, val_writer=None):
             data_time.update(time.time() - batch_start_time)
             
             for key in data.keys():
-                data[key] = data[key].cuda()
+                data[key] = data[key].to(args.local_rank)
             points = data
-            label = taxonomy_ids.cuda()
+            label = taxonomy_ids.to(args.local_rank)
 
             ret, loss1, class_feat = base_model(points)
             
@@ -259,7 +259,7 @@ def validate(base_model, test_dataloader, epoch, val_writer, args, config, logge
             #     points = data[0].cuda()
             #     label = data[1].cuda()
             for key in data.keys():
-                data[key] = data[key].cuda()
+                data[key] = data[key].to(args.local_rank)
             points = data
             label = taxonomy_ids.cuda()
 
@@ -445,7 +445,7 @@ def test(base_model, test_dataloader, args, config, logger=None):
             #     points = data.cuda()
             #     label = taxonomy_ids.cuda()
             for key in data.keys():
-                data[key] = data[key].cuda()
+                data[key] = data[key].to(args.local_rank)
             points = data
             label = taxonomy_ids.cuda()
             # points = misc.fps(points, npoints)

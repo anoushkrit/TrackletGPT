@@ -76,6 +76,18 @@ def main():
         local_rank = int(os.environ["LOCAL_RANK"])  # comes from torchrun
         world_size = torch.distributed.get_world_size()
 
+        # Debug: print CUDA_VISIBLE_DEVICES and device count
+        cuda_visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES", None)
+        print(f"[Rank {global_rank}] CUDA_VISIBLE_DEVICES: {cuda_visible_devices}")
+        print(f"[Rank {global_rank}] local_rank: {local_rank}, torch.cuda.device_count(): {torch.cuda.device_count()}")
+
+        if cuda_visible_devices is None:
+            print(f"[Rank {global_rank}] WARNING: CUDA_VISIBLE_DEVICES is not set. Device assignment may be incorrect.")
+
+        # Check local_rank validity
+        if local_rank >= torch.cuda.device_count():
+            raise RuntimeError(f"[Rank {global_rank}] local_rank {local_rank} exceeds available CUDA devices ({torch.cuda.device_count()})")
+
         # set the correct GPU device for this process
         torch.cuda.set_device(local_rank)
 

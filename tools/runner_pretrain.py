@@ -12,7 +12,7 @@ from sklearn.svm import LinearSVC
 import numpy as np
 from torchvision import transforms
 from datasets import data_transforms
-from pointnet2_ops import pointnet2_utils
+# from pointnet2_ops import pointnet2_utils
 from torchstat import stat
 
 train_transforms = transforms.Compose(
@@ -91,11 +91,11 @@ def run_net(args, config, train_writer=None, val_writer=None):
                 base_model)
             print_log('Using Synchronized BatchNorm ...', logger=logger)
         base_model = nn.parallel.DistributedDataParallel(base_model, device_ids=[
-                                                         args.local_rank % torch.cuda.device_count()], find_unused_parameters=True)
+                                                         args.local_rank], find_unused_parameters=True)
         print_log('Using Distributed Data parallel ...', logger=logger)
     else:
         print_log('Using Data parallel ...', logger=logger)
-        base_model = nn.DataParallel(base_model).cuda()
+        base_model = nn.DataParallel(base_model).to(args.local_rank)
     # optimizer & scheduler
     optimizer, scheduler = builder.build_opti_sche(base_model, config)
 
@@ -126,7 +126,7 @@ def run_net(args, config, train_writer=None, val_writer=None):
 
             data_time.update(time.time() - batch_start_time)
             for keys in data.keys():
-                data[keys] = data[keys].cuda()
+                data[keys] = data[keys].to(args.local_rank)
             points = data
             
             loss = base_model(points)
