@@ -15,7 +15,7 @@ def get_args():
         help='job launcher')     
     parser.add_argument('--local_rank', type=int, default=0)
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--pin_memory', action='store_true', default=True, help='pin memory for dataloader')
+    parser.add_argument('--pin_memory', type=bool, default=True, help='pin memory for dataloader')
     # seed 
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument(

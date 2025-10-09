@@ -718,9 +718,9 @@ class PointTransformer(nn.Module):
         self.num_group = config.num_group
         self.encoder_dims = config.encoder_dims
 
-        self.triplet_loss = config.triplet_loss
+        self.triplet_loss = config.get('triplet_loss', False)
 
-        self.is_tracklet = config.is_tracklet
+        self.is_tracklet = config.get('is_tracklet', False)
         self.is_center_aware = config.get('is_center_aware', False)
         self.is_tracklet_pc = config.get('is_tracklet_pc', False)
         self.pos_abs_relative = config.get('pos_abs_relative', False)
@@ -737,10 +737,12 @@ class PointTransformer(nn.Module):
         #     self.graph_encoder = GAT(self.graph_config)
 
         # assert self.encoder_dims in [128, 256, 384, 768, 1024]
-        # if self.encoder_dims <= 384:
-        self.encoder = Encoder_nano(encoder_channel=self.encoder_dims)
-        # else:
-        #     self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
+        if self.encoder_dims <= 256:
+            self.encoder = Encoder_nano(encoder_channel=self.encoder_dims)
+        elif self.encoder_dims <= 384:
+            self.encoder = Encoder_small(encoder_channel=self.encoder_dims)
+        else:
+            self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
 
         self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
         if self.is_center_aware:
@@ -753,7 +755,7 @@ class PointTransformer(nn.Module):
             num_classes=config.cls_dim,
             trans_dim=self.trans_dim,
             group_size=self.group_size,
-            multi_class_classification=self.config.streamline_patch,
+            multi_class_classification=self.config.get('streamline_patch', False),
         )
 
         self.generator_blocks = GPT_generator(
@@ -836,7 +838,7 @@ class PointTransformer(nn.Module):
 
 
     def get_loss_acc(self, ret, gt, class_feat=None, LRC_feat=None, LRC_label=None):
-        if self.config.streamline_patch:
+        if self.config.get('streamline_patch', False):
             ret = ret.reshape(-1, self.cls_dim)
             gt = gt.reshape(-1)
         loss = self.loss_ce(ret, gt.long())

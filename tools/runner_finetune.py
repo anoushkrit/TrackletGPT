@@ -94,6 +94,7 @@ def run_net(args, config, train_writer=None, val_writer=None):
             base_model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(
                 base_model)
             print_log('Using Synchronized BatchNorm ...', logger=logger)
+        print(args.local_rank)
         base_model = nn.parallel.DistributedDataParallel(
             base_model, device_ids=[args.local_rank])
         print_log('Using Distributed Data parallel ...', logger=logger)

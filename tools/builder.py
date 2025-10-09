@@ -24,8 +24,7 @@ def dataset_builder(args, config):
                                                      args.num_workers),
                                                  drop_last=config.others.subset == 'train',
                                                  worker_init_fn=worker_init_fn,
-                                                 sampler=sampler,
-                                                 pin_memory=args.pin_memory)
+                                                 sampler=sampler,)
     else:
         sampler = None
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.others.bs,

@@ -91,6 +91,7 @@ def run_net(args, config, train_writer=None, val_writer=None):
             base_model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(
                 base_model)
             print_log('Using Synchronized BatchNorm ...', logger=logger)
+        print(args.local_rank)
         base_model = nn.parallel.DistributedDataParallel(base_model, device_ids=[
                                                          args.local_rank % torch.cuda.device_count()], find_unused_parameters=True)
         print_log('Using Distributed Data parallel ...', logger=logger)
@@ -132,6 +133,8 @@ def run_net(args, config, train_writer=None, val_writer=None):
             
             loss = base_model(points)
 
+            if args.distributed:
+                loss = loss.mean()  # mean() to average on multi-gpu.
             loss.backward()
 
             # forward

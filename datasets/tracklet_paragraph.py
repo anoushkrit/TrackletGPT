@@ -161,7 +161,6 @@ class Tracklet_Sentence(Dataset):
             This function will only load .pkl files.
             This will remove the streamlines which belong to cluster not obeying the threshold.
         """
-
         subject_id, qbx_pkl_path, threshold, samples_per_subject, samples_per_class, neighbouring_streamline_count = subject_data
         clusters_L1_L2_L3, streamlines, labels = self.load_pickle(qbx_pkl_path)
         clusters_L3 = np.array(clusters_L1_L2_L3)[:, 2]
