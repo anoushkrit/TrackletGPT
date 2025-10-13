@@ -490,7 +490,7 @@ def test(base_model, test_dataloader, args, config, logger=None):
 
         # saving raw streamlines, with true and pred labels for dice score calculation
         model = args.config.split('/')[-2] # PointGPT-M or PointGPT-S
-        pkl_path = f'predictions_new/{args.exp_subset}/{model}/{dataset_name}/{args.exp_name}/pkls/test_pred__{model}.pkl'
+        pkl_path = f'predictions/{args.exp_subset}/{model}/{dataset_name}/{args.exp_name}/pkls/test_pred__{model}.pkl'
         os.makedirs(os.path.dirname(pkl_path), exist_ok=True)
         with open(pkl_path, 'wb') as f:
             pickle.dump((test_label.cpu().numpy(), test_pred.cpu().numpy(), raw_streamlines, subjects), f)

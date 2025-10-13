@@ -99,6 +99,7 @@ class Tracklet(Dataset):
         self.label_to_int_mapping = self.load_json(self.label_to_int_mapping_path)
         print_log(f"Starting to load streamlines...", logger=logger)
         self.load_streamlines_mp()
+        print_log(f"Loaded {len(self.streamlines)} streamlines from {len(set(self.subject_ids))} subjects.", logger=logger)
 
 
     def load_json(self, path):
