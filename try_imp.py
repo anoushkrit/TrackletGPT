@@ -23,6 +23,8 @@ def string_to_list(streamline):
 
 
 for dataset in os.listdir(root_path):
+    if dataset not in ['TractoInferno', '105HCP']:
+        continue
     for model in os.listdir(os.path.join(root_path, dataset)):
         for method in os.listdir(os.path.join(root_path, dataset, model)):
             for exp in os.listdir(os.path.join(root_path, dataset, model, method)):
@@ -49,7 +51,7 @@ for dataset in os.listdir(root_path):
                         true_labels, predicted_labels, streamlines, subjects = pickle.load(f)
                     
                     with Pool() as p:
-                        streamlines = p.map(string_to_list, streamlines)
+                        streamlines = list(tqdm(p.imap(string_to_list, streamlines), total=len(streamlines), desc='Converting streamlines to list'))
                     print('Total streamlines:', len(streamlines))
                     
                     subjects = np.array(subjects)
@@ -61,9 +63,6 @@ for dataset in os.listdir(root_path):
                     predicted_labels = [int_label_mapping[t] for t in predicted_labels]
 
                     for sub in unique_subjects:
-                        # TODO fix this later
-                        # if os.path.exists(f'{save_path}/{"_".join(methods.split(".")[0].split("_")[2:])}/{sub}'):
-                        #     continue
                         if sub not in ['599469', 'sub-1006']:
                             continue
                         subject_streamlines = [s for s,t in zip(streamlines, subjects) if t == sub]
@@ -72,7 +71,9 @@ for dataset in os.listdir(root_path):
 
                         unique_true_labels_subject = np.unique(true_labels_subject)
                         unique_pred_labels_subject = np.unique(predicted_labels_subject)
-                        for label in tqdm(unique_pred_labels_subject, desc=f'Processing subject {sub}'):
+                        for label in tqdm(unique_pred_labels_subject, desc=f'Processing pred subject {sub}'):
+                            if os.path.exists(f'{save_path}/{dataset}/{model}/{method}/{exp}/{sub}/{label}/pred_streamlines.pkl'):
+                                continue
                             pred_streamlines = [s for s,t in zip(subject_streamlines, predicted_labels_subject) if t == label]
 
                             # pickle_path = f'{save_path}/{"_".join(methods.split(".")[0].split("_")[2:])}/{sub}/{label}'
@@ -81,7 +82,9 @@ for dataset in os.listdir(root_path):
                             with open(f'{pred_save_path}/pred_streamlines.pkl', 'wb') as f:
                                 pickle.dump(pred_streamlines, f)
                         
-                        for label in tqdm(unique_true_labels_subject, desc=f'Processing subject {sub}'):
+                        for label in tqdm(unique_true_labels_subject, desc=f'Processing true subject {sub}'):
+                            if os.path.exists(f'{save_path}/{dataset}/{model}/{method}/{exp}/{sub}/{label}/true_streamlines.pkl'):
+                                continue
                             true_streamlines = [s for s,t in zip(subject_streamlines, true_labels_subject) if t == label]
 
                             # pickle_path = f'{save_path}/{"_".join(methods.split(".")[0].split("_")[2:])}/{sub}/{label}'
