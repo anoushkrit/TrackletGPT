@@ -462,12 +462,12 @@ class GPT_Transformer(nn.Module):
         if self.lstm_config is not None:
             self.LSTMencoder = LSTMencoder(self.lstm_config)
         
-        self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
-        # self.pos_embed = PositionEmbeddingCoordsFourier3D(
-        #     n_dim=3,
-        #     d_model=self.encoder_dims,
-        #     scale=1.0,         
-        # )
+        pos_embedding_type = config.get('possition_embedding_type', 'CoordsSine')
+        if pos_embedding_type == 'CoordsSine':
+            self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
+        elif pos_embedding_type == 'CoordsFourier3D':
+            self.pos_embed = PositionEmbeddingCoordsFourier3D(3, self.encoder_dims, 1.0)
+        
         if self.is_center_aware:
             self.center_aware_embedding = CenterAwareEmbedding(self.encoder_dims, config.num_group, config.group_size)
 
@@ -792,12 +792,12 @@ class PointTransformer(nn.Module):
         else:
             self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
 
-        # self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
-        self.pos_embed = PositionEmbeddingCoordsFourier3D(
-            n_dim=3,
-            d_model=self.encoder_dims,
-            scale=1.0,         
-        )
+        pos_embedding_type = config.get('possition_embedding_type', 'CoordsSine')
+        if pos_embedding_type == 'CoordsSine':
+            self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
+        elif pos_embedding_type == 'CoordsFourier3D':
+            self.pos_embed = PositionEmbeddingCoordsFourier3D(3, self.encoder_dims, 1.0)
+
         if self.is_center_aware:
             self.center_aware_embedding = CenterAwareEmbedding(self.encoder_dims, config.num_group, config.group_size)
 
