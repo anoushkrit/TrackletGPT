@@ -381,6 +381,49 @@ class PositionEmbeddingCoordsSine(nn.Module):
         pos_emb = F.pad(pos_emb, (0, self.padding))
         return pos_emb
 
+class PositionEmbeddingCoordsFourier3D(nn.Module):
+    """
+    Corrected Fourier feature positional encoding for 3D coordinates.
+    """
+
+    def __init__(
+        self,
+        n_dim: int = 3,
+        d_model: int = 256,
+        scale: float = 10.0,
+        learnable: bool = False,
+    ):
+        super().__init__()
+        assert d_model % 2 == 0, "d_model must be an even number."
+        self.n_dim = n_dim
+        self.d_model = d_model
+        self.scale = scale
+
+        n_freqs = d_model // 2
+        self.n_frequencies = n_freqs
+
+        # Shape: (n_freqs, n_dim) = (d_model/2, 3)
+        B = torch.randn(n_freqs, n_dim) * scale  # Sample random Fourier features from a Gaussian distribution.
+
+        if learnable:
+            self.B = nn.Parameter(B)
+        else:
+            self.register_buffer("B", B)
+
+    def forward(self, xyz: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            xyz: Tensor of shape (..., 3)
+        Returns:
+            pos_emb: Tensor of shape (..., d_model)
+        """
+        assert xyz.shape[-1] == self.n_dim, \
+            f"Expected last dim {self.n_dim}, got {xyz.shape[-1]}"
+        proj = 2 * math.pi * torch.matmul(xyz, self.B.T)
+        emb = torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
+
+        return emb
+
 
 class GPT_Transformer(nn.Module):
     def __init__(self, config, **kwargs):
@@ -420,6 +463,11 @@ class GPT_Transformer(nn.Module):
             self.LSTMencoder = LSTMencoder(self.lstm_config)
         
         self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
+        # self.pos_embed = PositionEmbeddingCoordsFourier3D(
+        #     n_dim=3,
+        #     d_model=self.encoder_dims,
+        #     scale=1.0,         
+        # )
         if self.is_center_aware:
             self.center_aware_embedding = CenterAwareEmbedding(self.encoder_dims, config.num_group, config.group_size)
 
@@ -744,7 +792,12 @@ class PointTransformer(nn.Module):
         else:
             self.encoder = Encoder_large(encoder_channel=self.encoder_dims)
 
-        self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
+        # self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
+        self.pos_embed = PositionEmbeddingCoordsFourier3D(
+            n_dim=3,
+            d_model=self.encoder_dims,
+            scale=1.0,         
+        )
         if self.is_center_aware:
             self.center_aware_embedding = CenterAwareEmbedding(self.encoder_dims, config.num_group, config.group_size)
 
