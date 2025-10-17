@@ -34,7 +34,11 @@ def calculate_weighted_average(csv_path, supports: dict) -> pd.DataFrame:
         df.rename(columns={'Unnamed: 0': 'class name'}, inplace=True)
     if 'Unnamed: 0' in df.columns:
         df.drop('Unnamed: 0', axis=1, inplace=True)
-
+    if 'weighted avg' in df.columns:
+        df.drop('weighted avg', axis=1, inplace=True)
+    if 'weighted avg' in df['class name'].values:
+        df = df[df['class name'] != 'weighted avg']
+    
     # calculating weighted average across all columns/subjects
     weighted_avg = {}
     for subject in df.columns:
@@ -89,7 +93,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # output_path
-    output_dir = f'predictions_encodernano/{args.exp_subset}/{args.model}/{args.dataset_name}/test_{args.exp_name}/results'
+    output_dir = f'predictions/{args.exp_subset}/{args.model}/{args.dataset_name}/test_{args.exp_name}/results'
 
     # list csv files
     csv_files = [f for f in os.listdir(output_dir) if f.endswith('.csv')]
@@ -117,6 +121,7 @@ if __name__ == '__main__':
         try:
             df = calculate_weighted_average(csv_file, supports)
             df.to_csv(csv_file, index=False)
-        except:
+        except Exception as e:
             print(f"Error in calculating weighted average for {csv_file}")
+            print(e)
             continue
