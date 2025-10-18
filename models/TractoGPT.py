@@ -381,6 +381,59 @@ class PositionEmbeddingCoordsSine(nn.Module):
         pos_emb = F.pad(pos_emb, (0, self.padding))
         return pos_emb
 
+class PositionalEmbeddingGPE(nn.Module):
+    def __init__(self, in_dim, out_dim, sigma):
+        super(PositionalEmbeddingGPE, self).__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.sigma = sigma
+
+        feat_dim = math.ceil(out_dim / in_dim)
+        self.feat_num = feat_dim * self.in_dim
+        self.out_idx = torch.linspace(0, self.feat_num - 1, out_dim).long()
+
+        self.feat_val = torch.linspace(-1.0, 1.0, feat_dim + 2)[1:-1].reshape(1, -1)
+
+    def forward(self, xyz):
+        # xyz = [B, N, 3] or [B, S, K, 3]
+
+        if self.out_dim == 0:
+            return xyz
+
+        if xyz.dim() not in {3, 4}:
+            raise ValueError("Input must be either [B, in_dim, N] or [B, in_dim, S, K]")
+
+        embeds = []
+        # Compute the RBF features for each channel in a loop
+        for i in range(self.in_dim):
+            tmp = xyz[..., i : i + 1] - self.feat_val.to(xyz.device)
+            embed = -0.5 * tmp**2 / (self.sigma**2)
+            embeds.append(embed.exp())
+
+        # Concatenate along the last dimension to get all features together
+        position_embed = torch.cat(embeds, dim=-1)  # [B, ..., feat_num]
+
+        # Select the required output dimensions using out_idx
+        position_embed = torch.index_select(
+            position_embed, -1, self.out_idx.to(xyz.device)
+        )
+        # [B, ..., out_dim]
+
+        # # Reshape based on the original input dimensions
+        # if xyz.dim() == 3:
+        #     b, _, n = xyz.shape
+        #     position_embed = position_embed.permute(0, 2, 1).reshape(b, self.out_dim, n)
+        #     # [B, out_dim, N]
+        # elif xyz.dim() == 4:
+        #     b, _, s, k = xyz.shape
+        #     position_embed = position_embed.permute(0, 3, 1, 2).reshape(
+        #         b, self.out_dim, s, k
+        #     )
+        #     # [B, feat_num, S, K]
+
+        return position_embed  # [B, ..., out_dim]
+
+
 class PositionEmbeddingCoordsFourier3D(nn.Module):
     """
     Corrected Fourier feature positional encoding for 3D coordinates.
@@ -467,6 +520,8 @@ class GPT_Transformer(nn.Module):
             self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
         elif pos_embedding_type == 'CoordsFourier3D':
             self.pos_embed = PositionEmbeddingCoordsFourier3D(3, self.encoder_dims, 1.0)
+        elif pos_embedding_type == 'GPE':
+            self.pos_embed = PositionalEmbeddingGPE(3, self.encoder_dims, sigma=0.3)
         
         if self.is_center_aware:
             self.center_aware_embedding = CenterAwareEmbedding(self.encoder_dims, config.num_group, config.group_size)
@@ -797,6 +852,8 @@ class PointTransformer(nn.Module):
             self.pos_embed = PositionEmbeddingCoordsSine(3, self.encoder_dims, 1.0)
         elif pos_embedding_type == 'CoordsFourier3D':
             self.pos_embed = PositionEmbeddingCoordsFourier3D(3, self.encoder_dims, 1.0)
+        elif pos_embedding_type == 'GPE':
+            self.pos_embed = PositionalEmbeddingGPE(3, self.encoder_dims, sigma=0.3)
 
         if self.is_center_aware:
             self.center_aware_embedding = CenterAwareEmbedding(self.encoder_dims, config.num_group, config.group_size)
